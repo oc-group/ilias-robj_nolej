@@ -121,6 +121,7 @@ class ilNolejConfigGUI extends ilPluginConfigGUI
         // API Key.
         $api_key = new ilPasswordInputGUI($this->plugin->txt("api_key"), "api_key");
         $api_key->setMaxLength(100);
+        $api_key->setSkipSyntaxCheck(true);
         $api_key->setRetype(false);
         $api_key->setDisableHtmlAutoComplete(true);
         $api_key->setRequired(true);
