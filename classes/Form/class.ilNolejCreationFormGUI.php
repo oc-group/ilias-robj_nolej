@@ -291,7 +291,7 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
         $language->setOptions(
             array_combine(
                 ilNolejAPI::LANG_SUPPORTED,
-                array_map(fn ($lang) => $this->lng->txt("meta_l_{$lang}"), ilNolejAPI::LANG_SUPPORTED)
+                array_map(fn($lang) => $this->lng->txt("meta_l_{$lang}"), ilNolejAPI::LANG_SUPPORTED)
             )
         );
         $language->setRequired(true);
@@ -526,7 +526,7 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
         $this->lng->loadLanguageModule("content");
 
         $pool_view = "folder";
-        if (in_array($_GET["pool_view"], ["folder", "all"])) {
+        if (isset($_GET["pool_view"]) && in_array($_GET["pool_view"], ["folder", "all"])) {
             $pool_view = $_GET["pool_view"];
         }
 
