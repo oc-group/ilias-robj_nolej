@@ -99,6 +99,8 @@ err_doc_response#:#An error accurred during the creation of NOLEJ module:<br>%s<
 err_file_upload#:#Failed to upload file. Please contact an administrator.
 err_ftb_missing_blank#:#Missing 4 underscores for Fill the blanks activity.
 err_h5p_content#:#Sorry, this activity cannot be loaded. Please contact an administrator.
+err_h5p_not_active#:#The H5P plugin is not active. Please contact an administrator.
+err_h5p_not_installed#:#The H5P plugin is not installed. Please contact an administrator.
 err_h5p_package#:#not a valid H5P package
 err_h5p_plugin#:#Sorry, your version of H5P plugin is not supported. Please update it or contact an administrator.
 err_json_decode#:#cannot decode the JSON

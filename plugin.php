@@ -11,15 +11,15 @@
  */
 
 $id = "xnlj";
-$version = "2.4";
+$version = "10.0.0";
 
-$ilias_min_version = "8.0";
-$ilias_max_version = "9.999";
+$ilias_min_version = "10.0";
+$ilias_max_version = "10.999";
 
-$responsible = "OC Open Consulting SB srl";
+$responsible = "OC Open Consulting SB Srl";
 $responsible_mail = "plugins@oc-group.eu";
 
 $supports_export = false;
+$supports_cli_setup = true;
 
-// Enable learning progress
 $learning_progress = true;

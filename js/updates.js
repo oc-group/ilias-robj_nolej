@@ -11,15 +11,15 @@ function xnlj_check_updates(endpoint, redirectTo, interval = 10) {
     }
 
     setInterval(() => {
-        il.Util.sendAjaxGetRequestToUrl(
-            endpoint,
-            {},
-            {},
-            function (o) {
-                if (o.responseText !== undefined && o.responseText == "update") {
+        fetch(endpoint, { credentials: "same-origin" })
+            .then((response) => response.text())
+            .then((text) => {
+                if (text.trim() == "update") {
                     window.location = redirectTo;
                 }
-            }
-        );
+            })
+            .catch(() => {
+                // Ignore network errors, retry at the next interval.
+            });
     }, interval * 1000);
 }

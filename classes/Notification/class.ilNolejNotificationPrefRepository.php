@@ -10,6 +10,8 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+declare(strict_types=1);
+
 /**
  * Nolej notification repository
  * (using user preferences)
@@ -19,14 +21,14 @@ class ilNolejNotificationPrefRepository
     /**
      * @var ilObjUser
      */
-    protected $user;
+    protected ilObjUser $user;
 
     /**
      * Constructor
      *
      * @param ilObjUser|null $user
      */
-    public function __construct($user = null)
+    public function __construct(?ilObjUser $user = null)
     {
         global $DIC;
 
@@ -38,9 +40,9 @@ class ilNolejNotificationPrefRepository
     /**
      * Set last checked timestamp
      */
-    public function updateLastCheckedTimestamp()
+    public function updateLastCheckedTimestamp(): void
     {
-        $this->user->writePref("nolej_last_checked", time());
+        $this->user->writePref("nolej_last_checked", (string) time());
     }
 
     /**
@@ -48,7 +50,7 @@ class ilNolejNotificationPrefRepository
      *
      * @return int
      */
-    public function getLastCheckedTimestamp()
+    public function getLastCheckedTimestamp(): int
     {
         return (int) $this->user->getPref("nolej_last_checked");
     }

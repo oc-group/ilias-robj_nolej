@@ -10,6 +10,8 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+declare(strict_types=1);
+
 /**
  * Repository plugin object class
  */
@@ -20,17 +22,6 @@ class ilObjNolej extends ilObjectPlugin implements ilLPStatusPluginInterface
 
     /** @var string */
     protected string $documentId = "";
-
-    /**
-     * Constructor.
-     * @param int $a_ref_id
-     */
-    public function __construct($a_ref_id = 0)
-    {
-        parent::__construct($a_ref_id);
-
-        require_once "./Services/Tracking/interfaces/interface.ilLPStatusPlugin.php";
-    }
 
     /**
      * Get type.
@@ -68,8 +59,8 @@ class ilObjNolej extends ilObjectPlugin implements ilLPStatusPluginInterface
         );
 
         while ($row = $this->db->fetchAssoc($set)) {
-            $this->setOnline($row["is_online"] ?? false);
-            $this->setDocumentId($row["document_id"] ?? "");
+            $this->setOnline((bool) ($row["is_online"] ?? false));
+            $this->setDocumentId((string) ($row["document_id"] ?? ""));
         }
     }
 
@@ -144,18 +135,19 @@ class ilObjNolej extends ilObjectPlugin implements ilLPStatusPluginInterface
      */
     protected function lookupDocumentData(string $name): string
     {
-        if ($this->getDocumentId() == null) {
-            return 0;
+        if ($this->getDocumentId() === "") {
+            return "";
         }
 
         $result = $this->db->queryF(
-            "SELECT `$name` FROM " . ilNolejPlugin::TABLE_DOC . " WHERE document_id = %s",
+            "SELECT " . $this->db->quoteIdentifier($name) . " FROM " . ilNolejPlugin::TABLE_DOC
+                . " WHERE document_id = %s",
             ["text"],
             [$this->getDocumentId()]
         );
 
         $row = $this->db->fetchAssoc($result);
-        return $row[$name];
+        return is_array($row) ? (string) $row[$name] : "";
     }
 
     /**
@@ -197,7 +189,7 @@ class ilObjNolej extends ilObjectPlugin implements ilLPStatusPluginInterface
             case ilNolejManagerGUI::STATUS_COMPLETED:
                 return $this->plugin->txt("action_activities_ok");
 
-            case ilNolejManagerGUI::STATUS_FAILED:
+            default:
                 return "";
         }
     }
@@ -264,8 +256,8 @@ class ilObjNolej extends ilObjectPlugin implements ilLPStatusPluginInterface
      */
     public function hasWritePermission(): bool
     {
-        global $ilAccess;
-        return $ilAccess->checkAccess("write", "", $this->getRefId());
+        global $DIC;
+        return $DIC->access()->checkAccess("write", "", $this->getRefId());
     }
 
     /**
@@ -274,8 +266,8 @@ class ilObjNolej extends ilObjectPlugin implements ilLPStatusPluginInterface
      */
     public function hasReadPermission(): bool
     {
-        global $ilAccess;
-        return $ilAccess->checkAccess("read", "", $this->getRefId());
+        global $DIC;
+        return $DIC->access()->checkAccess("read", "", $this->getRefId());
     }
 
     /**
@@ -286,17 +278,18 @@ class ilObjNolej extends ilObjectPlugin implements ilLPStatusPluginInterface
      */
     public function getContentIdOfType(string $type): int
     {
+        $this->db->setLimit(1);
         $result = $this->db->queryF(
             "SELECT content_id FROM " . ilNolejPlugin::TABLE_H5P
                 . " WHERE document_id = %s"
                 . " AND type = %s"
-                . " ORDER BY `generated` DESC"
-                . " LIMIT 1",
+                . " ORDER BY " . $this->db->quoteIdentifier("generated") . " DESC",
             ["text", "text"],
             [$this->documentId, $type]
         );
 
-        if ($row = $this->db->fetchAssoc($result)) {
+        $row = $this->db->fetchAssoc($result);
+        if (is_array($row)) {
             return (int) $row["content_id"];
         }
 
@@ -305,12 +298,12 @@ class ilObjNolej extends ilObjectPlugin implements ilLPStatusPluginInterface
 
     /**
      * Reset LP of users.
-     * @param array $user_ids
+     * @param int[] $user_ids
      */
     public function resetLPOfUsers(array $user_ids): void
     {
-        for ($i = 0, $n = count($user_ids); $i < $n; $i++) {
-            self::resetLPOfUser($user_ids[$i]);
+        foreach ($user_ids as $user_id) {
+            $this->resetLPOfUser((int) $user_id);
         }
     }
 
@@ -325,17 +318,16 @@ class ilObjNolej extends ilObjectPlugin implements ilLPStatusPluginInterface
 
     /**
      * Reset LP of the current user.
-     * @param int $user_id
      */
     public function resetLP(): void
     {
-        global $ilUser;
-        self::resetLPOfUser($ilUser->getId());
+        global $DIC;
+        $this->resetLPOfUser($DIC->user()->getId());
     }
 
     /**
      * Get all user ids with LP status completed.
-     * @return array
+     * @return int[]
      */
     public function getLPCompleted(): array
     {
@@ -344,7 +336,7 @@ class ilObjNolej extends ilObjectPlugin implements ilLPStatusPluginInterface
 
     /**
      * Get all user ids with LP status not attempted.
-     * @return array
+     * @return int[]
      */
     public function getLPNotAttempted(): array
     {
@@ -353,7 +345,7 @@ class ilObjNolej extends ilObjectPlugin implements ilLPStatusPluginInterface
 
     /**
      * Get all user ids with LP status failed.
-     * @return array
+     * @return int[]
      */
     public function getLPFailed(): array
     {
@@ -363,7 +355,7 @@ class ilObjNolej extends ilObjectPlugin implements ilLPStatusPluginInterface
 
     /**
      * Get all user ids with LP status in progress.
-     * @return array
+     * @return int[]
      */
     public function getLPInProgress(): array
     {

@@ -10,37 +10,39 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+declare(strict_types=1);
+
 /**
  * This class takes care of the calls to the webhook.
  */
 class ilNolejWebhook
 {
     /** @var ilNolejPlugin */
-    protected $plugin;
+    protected ilNolejPlugin $plugin;
 
-    /** @var array */
-    protected $data;
+    /** @var array<string, mixed> */
+    protected array $data = [];
 
     /** @var bool */
-    protected $shouldExit = false;
+    protected bool $shouldExit = false;
 
     public function __construct()
     {
-        require_once ilNolejPlugin::PLUGIN_DIR . "/classes/Notification/class.ilNolejActivity.php";
-        require_once ilNolejPlugin::PLUGIN_DIR . "/classes/class.ilNolejManagerGUI.php";
         $this->plugin = ilNolejPlugin::getInstance();
     }
 
     /**
-     * Parse the request from POST content if
-     * @param mixed $data is not null
+     * Parse the request from POST content if $data is null.
+     * @param mixed $data the decoded request, or null to read it from the POST content
      * @return void
      */
-    public function parse($data = null)
+    public function parse($data = null): void
     {
+        global $DIC;
+
         if ($data == null) {
             header("Content-type: application/json; charset=UTF-8");
-            $data = json_decode(file_get_contents("php://input"), true);
+            $data = json_decode((string) file_get_contents("php://input"), true);
             $this->shouldExit = true;
         }
 
@@ -51,6 +53,7 @@ class ilNolejWebhook
         ) {
             $this->exitWithMessage(400, "Request not valid.");
             $this->plugin->log("Received invalid request: " . var_export($data, true));
+            return;
         }
 
         $this->data = $data;
@@ -72,10 +75,8 @@ class ilNolejWebhook
 
             case "work in progress":
                 $this->plugin->log("Received work in progress.");
-                global $DIC, $tpl;
                 if (!$DIC->user()->isAnonymous()) {
-                    $tpl->setOnScreenMessage("info", $this->plugin->txt("work_in_progress"));
-                    return;
+                    $DIC->ui()->mainTemplate()->setOnScreenMessage("info", $this->plugin->txt("work_in_progress"));
                 }
                 break;
 
@@ -88,11 +89,18 @@ class ilNolejWebhook
      * Die with status code and a message
      * @param int $code
      * @param string $message
+     * @return bool false if the request is not served by the webhook endpoint (no exit).
      */
     protected function exitWithMessage(
-        $code = 400,
-        $message = ""
-    ) {
+        int $code = 400,
+        string $message = ""
+    ): bool {
+        if ($this->shouldExit) {
+            // The status code must be set before any output: afterwards PHP raises a
+            // warning that ILIAS turns into an exception (fatal error page).
+            http_response_code($code);
+        }
+
         if (!empty($message)) {
             $this->plugin->log("Replied to Nolej with message: " . $message);
             if ($this->shouldExit) {
@@ -104,36 +112,42 @@ class ilNolejWebhook
             return false;
         }
 
-        http_response_code($code);
         exit;
+    }
+
+    /**
+     * Check that the payload of an action (transcription, analysis, activities)
+     * is valid. A missing consumed credit is considered as zero.
+     * @return bool
+     */
+    protected function isPayloadValid(): bool
+    {
+        if (($this->data["consumedCredit"] ?? null) == null) {
+            $this->data["consumedCredit"] = 0;
+        }
+
+        return isset(
+            $this->data["documentID"],
+            $this->data["status"],
+            $this->data["code"],
+            $this->data["error_message"]
+        ) &&
+            is_string($this->data["documentID"]) &&
+            is_string($this->data["status"]) &&
+            is_string($this->data["error_message"]) &&
+            is_int($this->data["code"]) &&
+            is_int($this->data["consumedCredit"]);
     }
 
     /**
      * Check transcription action.
      * @return void
      */
-    public function checkTranscription()
+    public function checkTranscription(): void
     {
         global $DIC;
 
-        if ($this->data["consumedCredit"] == null) {
-            $this->data["consumedCredit"] = 0;
-        }
-
-        if (
-            !isset(
-                $this->data["documentID"],
-                $this->data["status"],
-                $this->data["code"],
-                $this->data["error_message"],
-                $this->data["consumedCredit"]
-            ) ||
-            !is_string($this->data["documentID"]) ||
-            !is_string($this->data["status"]) ||
-            !is_string($this->data["error_message"]) ||
-            !is_integer($this->data["code"]) ||
-            !is_integer($this->data["consumedCredit"])
-        ) {
+        if (!$this->isPayloadValid()) {
             $this->exitWithMessage(400, "Request not valid.");
             return;
         }
@@ -165,8 +179,8 @@ class ilNolejWebhook
 
         $document = $db->fetchAssoc($result);
 
-        $now = strtotime("now");
-        $this->setUserLang($document["user_id"]);
+        $now = time();
+        $this->setUserLang((int) $document["user_id"]);
         $manager = ilNolejManagerGUI::getInstanceByDocumentId($documentId);
 
         if (
@@ -269,28 +283,11 @@ class ilNolejWebhook
      * Check analysis action.
      * @return void
      */
-    public function checkAnalysis()
+    public function checkAnalysis(): void
     {
         global $DIC;
 
-        if ($this->data["consumedCredit"] == null) {
-            $this->data["consumedCredit"] = 0;
-        }
-
-        if (
-            !isset(
-                $this->data["documentID"],
-                $this->data["status"],
-                $this->data["code"],
-                $this->data["error_message"],
-                $this->data["consumedCredit"]
-            ) ||
-            !is_string($this->data["documentID"]) ||
-            !is_string($this->data["status"]) ||
-            !is_string($this->data["error_message"]) ||
-            !is_integer($this->data["code"]) ||
-            !is_integer($this->data["consumedCredit"])
-        ) {
+        if (!$this->isPayloadValid()) {
             $this->exitWithMessage(400, "Request not valid.");
             return;
         }
@@ -322,8 +319,8 @@ class ilNolejWebhook
 
         $document = $db->fetchAssoc($result);
 
-        $now = strtotime("now");
-        $this->setUserLang($document["user_id"]);
+        $now = time();
+        $this->setUserLang((int) $document["user_id"]);
         $manager = ilNolejManagerGUI::getInstanceByDocumentId($documentId);
 
         if (
@@ -389,28 +386,11 @@ class ilNolejWebhook
      * Check activities action.
      * @return void
      */
-    public function checkActivities()
+    public function checkActivities(): void
     {
         global $DIC;
 
-        if ($this->data["consumedCredit"] == null) {
-            $this->data["consumedCredit"] = 0;
-        }
-
-        if (
-            !isset(
-                $this->data["documentID"],
-                $this->data["status"],
-                $this->data["code"],
-                $this->data["error_message"],
-                $this->data["consumedCredit"]
-            ) ||
-            !is_string($this->data["documentID"]) ||
-            !is_string($this->data["status"]) ||
-            !is_string($this->data["error_message"]) ||
-            !is_integer($this->data["code"]) ||
-            !is_integer($this->data["consumedCredit"])
-        ) {
+        if (!$this->isPayloadValid()) {
             $this->exitWithMessage(400, "Request not valid.");
             return;
         }
@@ -441,8 +421,8 @@ class ilNolejWebhook
         }
 
         $document = $db->fetchAssoc($result);
-        $now = strtotime("now");
-        $this->setUserLang($document["user_id"]);
+        $now = time();
+        $this->setUserLang((int) $document["user_id"]);
         $manager = ilNolejManagerGUI::getInstanceByDocumentId($documentId);
 
         $db->manipulateF(
@@ -528,16 +508,16 @@ class ilNolejWebhook
      * @param string[] $vars parameters to use in $bodyVar's sprintf
      */
     public function sendNotification(
-        $documentId,
-        $userId,
-        $action,
-        $status,
-        $code,
-        $errorMessage,
-        $credits,
-        $bodyVar,
-        $vars = []
-    ) {
+        string $documentId,
+        int $userId,
+        string $action,
+        string $status,
+        int $code,
+        string $errorMessage,
+        int $credits,
+        string $bodyVar,
+        array $vars = []
+    ): void {
         /** Send Notification */
         $ass = new ilNolejActivity($documentId, $userId, $action);
         $ass->withStatus($status)
@@ -569,7 +549,7 @@ class ilNolejWebhook
         $notification->setLongDescriptionVar($descriptionVar);
         $notification->setAutoDisable(false);
         $notification->setValidForSeconds(0);
-        $notification->setHandlerParam("mail.sender", SYSTEM_USER_ID);
+        $notification->setHandlerParam("mail.sender", (string) SYSTEM_USER_ID);
         $notification->notifyByUsers([$userId]);
     }
 
@@ -577,7 +557,7 @@ class ilNolejWebhook
      * @param int $a_user_id
      * @return ilLanguage
      */
-    protected function setUserLang($a_user_id)
+    protected function setUserLang(int $a_user_id): ilLanguage
     {
         $lang = ilObjUser::_lookupLanguage($a_user_id);
         $lng = new ilLanguage($lang);

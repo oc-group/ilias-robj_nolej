@@ -10,7 +10,8 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-use ILIAS\UI\Component\Listing\Workflow\Step;
+declare(strict_types=1);
+
 use Nolej\ilTextAreaInputGUI;
 
 /**
@@ -50,9 +51,7 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
      */
     public function saveForm(): void
     {
-        $status = $this->status;
-
-        if ($status < ilNolejManagerGUI::STATUS_REVISION) {
+        if ($this->status < ilNolejManagerGUI::STATUS_REVISION) {
             $this->tpl->setContent($this->infoBox($this->plugin->txt("err_analysis_not_ready")));
             $this->tpl->setRightContent(
                 $this->renderer->render($this->manager->getWorkflow()->withActive(3))
@@ -81,59 +80,17 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
         $questions = json_decode($json);
         $questions = $questions->questions;
 
-        $length = $form->getInput("questions_count");
+        $length = (int) $form->getInput("questions_count");
         for ($i = 0; $i < $length; $i++) {
-            $id = $form->getInput("question_{$i}_id");
-            if (empty($id)) {
-                continue;
+            $question = $this->readQuestion($form, $i);
+            if ($question !== null) {
+                $questions[$i] = $question;
             }
-
-            $questionType = $form->getInput("question_{$i}_type");
-
-            if ($questionType == "open") {
-                $enable = (bool) $form->getInput("question_{$i}_enable");
-                $useForGrading = false;
-            } else {
-                $useForGrading = (bool) $form->getInput("question_{$i}_enable");
-                $enable = false;
-            }
-
-            $answer = $questionType == "hoq"
-                ? ""
-                : $form->getInput("question_{$i}_answer");
-
-            $question = $questionType == "tf"
-                ? ""
-                : $form->getInput("question_{$i}_question");
-
-            $distractorsCount = $form->getInput("question_{$i}_distractors");
-            $distractors = [];
-            for ($j = 0; $j < $distractorsCount; $j++) {
-                $distractor = $form->getInput("question_{$i}_distractor_{$j}");
-                if (!empty($distractor)) {
-                    $distractors[] = $distractor;
-                }
-            }
-            $selectedDistractor = $questionType == "tf"
-                ? $form->getInput("question_{$i}_use_distractor")
-                : "";
-
-            $questions[$i] = [
-                "id" => $id,
-                "explanation" => "false",
-                "enable" => $enable,
-                "answer" => $answer,
-                "use_for_grading" => $useForGrading,
-                "question" => $question,
-                "question_type" => $questionType,
-                "distractors" => $distractors,
-                "selected_distractor" => $selectedDistractor,
-            ];
         }
 
         $success = $this->manager->writeDocumentFile(
             "questions.json",
-            json_encode(["questions" => $questions])
+            (string) json_encode(["questions" => $questions])
         );
         if (!$success) {
             $this->tpl->setOnScreenMessage("failure", $this->plugin->txt("err_questions_save"));
@@ -142,12 +99,73 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
         }
 
         $success = $this->manager->putNolejContent("questions", "questions.json");
-        if (!$success) {
-            $this->tpl->setOnScreenMessage("failure", $this->plugin->txt("err_questions_put"));
-        } else {
-            $this->tpl->setOnScreenMessage("success", $this->plugin->txt("questions_saved"));
-        }
+        $this->tpl->setOnScreenMessage(
+            $success ? "success" : "failure",
+            $this->plugin->txt($success ? "questions_saved" : "err_questions_put")
+        );
         $this->showForm();
+    }
+
+    /**
+     * Read the i-th question from the (checked) form.
+     * @param ilPropertyFormGUI $form
+     * @param int $i index of the question
+     * @return array<string, mixed>|null null if the question is not in the form.
+     */
+    protected function readQuestion(ilPropertyFormGUI $form, int $i): ?array
+    {
+        $id = $form->getInput("question_{$i}_id");
+        if (empty($id)) {
+            return null;
+        }
+
+        $questionType = $form->getInput("question_{$i}_type");
+        $isEnabled = (bool) $form->getInput("question_{$i}_enable");
+
+        $answer = $questionType == "hoq"
+            ? ""
+            : $form->getInput("question_{$i}_answer");
+
+        $question = $questionType == "tf"
+            ? ""
+            : $form->getInput("question_{$i}_question");
+
+        $distractorsCount = (int) $form->getInput("question_{$i}_distractors");
+        $distractors = [];
+        for ($j = 0; $j < $distractorsCount; $j++) {
+            $distractor = $form->getInput("question_{$i}_distractor_{$j}");
+            if (!empty($distractor)) {
+                $distractors[] = $distractor;
+            }
+        }
+        $selectedDistractor = $questionType == "tf"
+            ? $form->getInput("question_{$i}_use_distractor")
+            : "";
+
+        return [
+            "id" => $id,
+            "explanation" => "false",
+            "enable" => $questionType == "open" && $isEnabled,
+            "answer" => $answer,
+            "use_for_grading" => $questionType != "open" && $isEnabled,
+            "question" => $question,
+            "question_type" => $questionType,
+            "distractors" => $distractors,
+            "selected_distractor" => $selectedDistractor,
+        ];
+    }
+
+    /**
+     * Get the question type to filter the questions, from the query.
+     * @return string empty string if there is no filter.
+     */
+    protected function getQuestionTypeFilter(): string
+    {
+        if (!$this->query->has("filter_type")) {
+            return "";
+        }
+
+        return $this->query->retrieve("filter_type", $this->refinery->kindlyTo()->string());
     }
 
     /**
@@ -155,7 +173,7 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
      * @param bool $usePost Set value from POST, if false load questions file
      * @return ilPropertyFormGUI
      */
-    protected function form($usePost = false): ilPropertyFormGUI
+    protected function form(bool $usePost = false): ilPropertyFormGUI
     {
         $form = new ilPropertyFormGUI();
         $form->setTitle($this->plugin->txt("review_questions"));
@@ -168,7 +186,7 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
             return $form;
         }
 
-        $questionTypeFilter = $_GET["filter_type"] ?? "";
+        $questionTypeFilter = $this->getQuestionTypeFilter();
         $questionTypes = [];
 
         $questions = json_decode($json);
@@ -176,7 +194,7 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
 
         $length = count($questions);
         $length_input = new ilHiddenInputGUI("questions_count");
-        $length_input->setValue($length);
+        $length_input->setValue((string) $length);
         $form->addItem($length_input);
         for ($i = 0; $i < $length; $i++) {
             // Counter.
@@ -190,130 +208,167 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
                 continue;
             }
 
-            $section = new ilFormSectionHeaderGUI();
-            $section->setTitle(sprintf($this->plugin->txt("questions_n"), $i + 1));
-            $form->addItem($section);
+            $this->addQuestionItems($form, $questions[$i], $i, $usePost);
+        }
 
-            $id = new ilHiddenInputGUI("question_{$i}_id");
-            $id->setValue($questions[$i]->id);
-            $form->addItem($id);
+        $form->setDescription($this->filterControl($questionTypes, $questionTypeFilter, $length));
 
-            // Text of the question.
-            if ($questions[$i]->question_type != "tf") {
-                $question = new ilTextAreaInputGUI($this->plugin->txt("questions_question"), "question_{$i}_question");
-                if ($questions[$i]->question_type == "ftb") {
-                    $question->addRegex("/_{4}/", $this->plugin->txt("err_ftb_missing_blank"));
-                }
-                $form->addItem($question);
-            } else {
-                $question = null;
+        $this->ctrl->setParameter($this, "filter_type", $questionTypeFilter);
+        $form->addCommandButton(self::CMD_SAVE, $this->lng->txt("save"));
+        $form->setFormAction($this->ctrl->getFormAction($this));
+
+        return $form;
+    }
+
+    /**
+     * Add to the form the inputs of a question.
+     * @param ilPropertyFormGUI $form
+     * @param object $question the question, as read from the questions file
+     * @param int $i index of the question
+     * @param bool $usePost
+     * @return void
+     */
+    protected function addQuestionItems(ilPropertyFormGUI $form, $question, int $i, bool $usePost): void
+    {
+        $type = $question->question_type;
+
+        $section = new ilFormSectionHeaderGUI();
+        $section->setTitle(sprintf($this->plugin->txt("questions_n"), $i + 1));
+        $form->addItem($section);
+
+        $id = new ilHiddenInputGUI("question_{$i}_id");
+        $id->setValue((string) $question->id);
+        $form->addItem($id);
+
+        // Text of the question.
+        $questionInput = null;
+        if ($type != "tf") {
+            $questionInput = new ilTextAreaInputGUI($this->plugin->txt("questions_question"), "question_{$i}_question");
+            if ($type == "ftb") {
+                $questionInput->addRegex("/_{4}/", $this->plugin->txt("err_ftb_missing_blank"));
             }
+            $form->addItem($questionInput);
+        }
 
-            // Question type.
-            $questionType = new ilHiddenInputGUI("question_{$i}_type");
-            $questionType->setValue($questions[$i]->question_type);
-            $form->addItem($questionType);
+        // Question type.
+        $questionType = new ilHiddenInputGUI("question_{$i}_type");
+        $questionType->setValue((string) $type);
+        $form->addItem($questionType);
 
-            $questionTypeLabel = new ilNonEditableValueGUI(
-                $this->plugin->txt("questions_question_type"),
-                "question_{$i}_type_label"
+        $questionTypeLabel = new ilNonEditableValueGUI(
+            $this->plugin->txt("questions_question_type"),
+            "question_{$i}_type_label"
+        );
+        $questionTypeLabel->setValue($this->plugin->txt("questions_type_" . $type));
+        $form->addItem($questionTypeLabel);
+
+        // Enable question.
+        $enable = new ilCheckboxInputGUI(
+            $this->plugin->txt($type == "open" ? "questions_enable" : "questions_use_for_grading"),
+            "question_{$i}_enable"
+        );
+        $form->addItem($enable);
+
+        // Text of the answer.
+        $answer = null;
+        if ($type != "hoq") {
+            $answer = new ilTextAreaInputGUI(
+                $this->plugin->txt($type == "tf" ? "questions_answer_true" : "questions_answer"),
+                "question_{$i}_answer"
             );
-            $questionTypeLabel->setValue(
-                $this->plugin->txt("questions_type_" . $questions[$i]->question_type)
-            );
-            $form->addItem($questionTypeLabel);
-
-            // Enable question.
-            $enable = new ilCheckboxInputGUI(
-                $this->plugin->txt(
-                    $questions[$i]->question_type == "open"
-                        ? "questions_enable"
-                        : "questions_use_for_grading"
-                ),
-                "question_{$i}_enable"
-            );
-            $form->addItem($enable);
-
-            // Text of the answer.
-            if ($questions[$i]->question_type != "hoq") {
-                $answer = new ilTextAreaInputGUI(
-                    $this->plugin->txt($questions[$i]->question_type == "tf" ? "questions_answer_true" : "questions_answer"),
-                    "question_{$i}_answer"
-                );
-                if ($questions[$i]->question_type == "tf") {
-                    $form->addItem($answer);
-                } else {
-                    $enable->addSubItem($answer);
-                }
-            } else {
-                $answer = null;
+            if ($type == "tf") {
+                $form->addItem($answer);
             }
-
-            // Distractors.
-            $distractorsCount = count($questions[$i]->distractors);
-            $distractors = new ilHiddenInputGUI("question_{$i}_distractors");
-            $distractors->setValue($distractorsCount);
-            $form->addItem($distractors);
-
-            for ($j = 0; $j < $distractorsCount; $j++) {
-                $distractor = new ilTextAreaInputGUI(
-                    $j == 0 ? $this->plugin->txt($questions[$i]->question_type == "tf" ? "questions_answer_false" : "questions_distractors") : "",
-                    "question_{$i}_distractor_{$j}"
-                );
-                if ($questions[$i]->question_type == "tf") {
-                    $form->addItem($distractor);
-                } else {
-                    $enable->addSubItem($distractor);
-                }
-                if ($usePost) {
-                    $distractor->setValueByArray($this->request->getParsedBody());
-                } else {
-                    $distractor->setValue($questions[$i]->distractors[$j]);
-                }
-            }
-
-            // Choose distractor.
-            if ($questions[$i]->question_type == "tf") {
-                $useDistractor = new ilSelectInputGUI(
-                    $this->plugin->txt("questions_answer_distractor"),
-                    "question_{$i}_use_distractor"
-                );
-                $useDistractor->setOptions([
-                    "" => $this->plugin->txt("questions_answer_true"),
-                    "useFalse" => $this->plugin->txt("questions_answer_false"),
-                ]);
-                $enable->addSubItem($useDistractor);
-                if ($usePost) {
-                    $useDistractor->setValueByArray($this->request->getParsedBody());
-                } else {
-                    $useDistractor->setValue($questions[$i]->selected_distractor);
-                }
-            }
-
-            if ($usePost) {
-                $enable->setValueByArray($this->request->getParsedBody());
-                if (isset($answer)) {
-                    $answer->setValueByArray($this->request->getParsedBody());
-                }
-                if (isset($question)) {
-                    $question->setValueByArray($this->request->getParsedBody());
-                }
-            } else {
-                $enable->setChecked(
-                    $questions[$i]->question_type == "open"
-                        ? $questions[$i]->enable
-                        : $questions[$i]->use_for_grading
-                );
-                if (isset($answer)) {
-                    $answer->setValue($questions[$i]->answer);
-                }
-                if (isset($question)) {
-                    $question->setValue($questions[$i]->question);
-                }
+            if ($type != "tf") {
+                $enable->addSubItem($answer);
             }
         }
 
-        // Use view control to filter questions.
+        $this->addDistractorItems($form, $enable, $question, $i, $usePost);
+
+        if ($usePost) {
+            $enable->setValueByArray($this->getPostData());
+            $answer?->setValueByArray($this->getPostData());
+            $questionInput?->setValueByArray($this->getPostData());
+            return;
+        }
+
+        $enable->setChecked((bool) ($type == "open" ? $question->enable : $question->use_for_grading));
+        $answer?->setValue((string) $question->answer);
+        $questionInput?->setValue((string) $question->question);
+    }
+
+    /**
+     * Add to the form the distractors of a question, and the distractor choice of true/false questions.
+     * @param ilPropertyFormGUI $form
+     * @param ilCheckboxInputGUI $enable the enable checkbox of the question
+     * @param object $question the question, as read from the questions file
+     * @param int $i index of the question
+     * @param bool $usePost
+     * @return void
+     */
+    protected function addDistractorItems(
+        ilPropertyFormGUI $form,
+        ilCheckboxInputGUI $enable,
+        $question,
+        int $i,
+        bool $usePost
+    ): void {
+        $type = $question->question_type;
+
+        $distractorsCount = count($question->distractors);
+        $distractors = new ilHiddenInputGUI("question_{$i}_distractors");
+        $distractors->setValue((string) $distractorsCount);
+        $form->addItem($distractors);
+
+        for ($j = 0; $j < $distractorsCount; $j++) {
+            $distractor = new ilTextAreaInputGUI(
+                $j == 0 ? $this->plugin->txt($type == "tf" ? "questions_answer_false" : "questions_distractors") : "",
+                "question_{$i}_distractor_{$j}"
+            );
+            if ($type == "tf") {
+                $form->addItem($distractor);
+            }
+            if ($type != "tf") {
+                $enable->addSubItem($distractor);
+            }
+            if ($usePost) {
+                $distractor->setValueByArray($this->getPostData());
+                continue;
+            }
+            $distractor->setValue((string) $question->distractors[$j]);
+        }
+
+        // Choose distractor.
+        if ($type != "tf") {
+            return;
+        }
+
+        $useDistractor = new ilSelectInputGUI(
+            $this->plugin->txt("questions_answer_distractor"),
+            "question_{$i}_use_distractor"
+        );
+        $useDistractor->setOptions([
+            "" => $this->plugin->txt("questions_answer_true"),
+            "useFalse" => $this->plugin->txt("questions_answer_false"),
+        ]);
+        $enable->addSubItem($useDistractor);
+        if ($usePost) {
+            $useDistractor->setValueByArray($this->getPostData());
+            return;
+        }
+        $useDistractor->setValue((string) $question->selected_distractor);
+    }
+
+    /**
+     * Use view control to filter questions.
+     * @param array<string, int> $questionTypes number of questions per type
+     * @param string $questionTypeFilter the selected type
+     * @param int $length total number of questions
+     * @return string html
+     */
+    protected function filterControl(array $questionTypes, string $questionTypeFilter, int $length): string
+    {
         $target = $this->ctrl->getLinkTarget($this, self::CMD_SHOW);
         $all = sprintf("%s (%d)", $this->plugin->txt("questions_type_all"), $length);
         $actions = [
@@ -333,12 +388,6 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
             ->mode($actions, $this->plugin->txt("questions_question_type"))
             ->withActive($selectedAction);
 
-        $form->setDescription($this->renderer->render([$this->factory->divider()->horizontal(), $viewControl]));
-
-        $this->ctrl->setParameter($this, "filter_type", $questionTypeFilter);
-        $form->addCommandButton(self::CMD_SAVE, $this->lng->txt("save"));
-        $form->setFormAction($this->ctrl->getFormAction($this));
-
-        return $form;
+        return $this->renderer->render([$this->factory->divider()->horizontal(), $viewControl]);
     }
 }

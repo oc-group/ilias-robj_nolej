@@ -10,6 +10,8 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+declare(strict_types=1);
+
 /**
  * Plugin configuration GUI class
  *
@@ -41,24 +43,26 @@ class ilNolejConfigGUI extends ilPluginConfigGUI
     /** @var ilLanguage */
     protected ilLanguage $lng;
 
+    /** @var ilGlobalTemplateInterface */
+    protected ilGlobalTemplateInterface $tpl;
+
     /** @var ilNolejPlugin */
-    protected $plugin;
+    protected ilNolejPlugin $plugin;
 
     public function __construct()
     {
-        global $DIC, $tpl;
+        global $DIC;
         $this->ctrl = $DIC->ctrl();
         $this->tabs = $DIC->tabs();
         $this->db = $DIC->database();
         $this->lng = $DIC->language();
+        $this->tpl = $DIC->ui()->mainTemplate();
 
         $this->lng->loadLanguageModule(ilNolejPlugin::PREFIX);
         $this->plugin = ilNolejPlugin::getInstance();
 
-        $tpl->setTitleIcon(ilNolejPlugin::PLUGIN_DIR . "/templates/images/icon_xnlj.svg");
-        $tpl->setTitle($this->plugin->txt("plugin_title"), false);
-
-        require_once ilNolejPlugin::PLUGIN_DIR . "/classes/class.ilNolejAPI.php";
+        $this->tpl->setTitleIcon(ilNolejPlugin::PLUGIN_DIR . "/templates/images/icon_xnlj.svg");
+        $this->tpl->setTitle($this->plugin->txt("plugin_title"), false);
     }
 
     /**
@@ -84,10 +88,8 @@ class ilNolejConfigGUI extends ilPluginConfigGUI
      * @param ?string $active_tab
      * @return void
      */
-    protected function initTabs($active_tab = null)
+    protected function initTabs(?string $active_tab = null): void
     {
-        global $tpl;
-
         $this->tabs->addTab(
             self::TAB_CONFIGURE,
             $this->plugin->txt("tab_" . self::TAB_CONFIGURE),
@@ -98,17 +100,17 @@ class ilNolejConfigGUI extends ilPluginConfigGUI
             case self::TAB_CONFIGURE:
             default:
                 $this->tabs->activateTab(self::TAB_CONFIGURE);
-                $tpl->setTitle($this->plugin->txt("plugin_title"), false);
+                $this->tpl->setTitle($this->plugin->txt("plugin_title"), false);
         }
 
-        $tpl->setDescription($this->plugin->txt("plugin_description"));
+        $this->tpl->setDescription($this->plugin->txt("plugin_description"));
     }
 
     /**
      * Init configuration form.
      * @return ilPropertyFormGUI form object
      */
-    public function initConfigurationForm()
+    public function initConfigurationForm(): ilPropertyFormGUI
     {
         $this->initTabs(self::TAB_CONFIGURE);
 
@@ -147,28 +149,26 @@ class ilNolejConfigGUI extends ilPluginConfigGUI
     /**
      * Save: update values in DB
      */
-    public function save()
+    public function save(): void
     {
-        global $DIC;
-
         $form = $this->initConfigurationForm();
 
         // Check form input.
         if (!$form->checkInput()) {
             // Input not ok.
             $form->setValuesByPost();
-            $DIC->ui()->mainTemplate()->setContent($form->getHTML());
+            $this->tpl->setContent($form->getHTML());
             return;
         }
 
         // Save API Key.
         $api_key = $form->getInput("api_key");
         if (!empty($api_key) && $api_key != self::SECRET) {
-            $this->plugin->saveConfig("api_key", $api_key);
+            $this->plugin->saveConfig("api_key", (string) $api_key);
         }
 
         // Save interval.
-        $this->plugin->saveConfig("interval", $form->getInput("interval"));
+        $this->plugin->saveConfig("interval", (string) $form->getInput("interval"));
 
         $this->ctrl->redirect($this, self::CMD_CONFIGURE);
     }
@@ -177,11 +177,9 @@ class ilNolejConfigGUI extends ilPluginConfigGUI
      * Configuration screen.
      * @return void
      */
-    public function configure()
+    public function configure(): void
     {
-        global $DIC;
-
         $form = $this->initConfigurationForm();
-        $DIC->ui()->mainTemplate()->setContent($form->getHTML());
+        $this->tpl->setContent($form->getHTML());
     }
 }

@@ -10,6 +10,8 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+declare(strict_types=1);
+
 namespace Nolej;
 
 /**
@@ -17,14 +19,13 @@ namespace Nolej;
  */
 class ilTextAreaInputGUI extends \ilTextAreaInputGUI
 {
-    /** @var array */
-    protected $regex = [];
+    /** @var array<int, array{pattern: string, alert: string}> */
+    protected array $regex = [];
 
     /**
      * Constructor.
      * @param string $title
      * @param string $postvar
-     * @param \ilNolejPlugin $plugin
      */
     public function __construct(
         string $title = "",
@@ -41,7 +42,7 @@ class ilTextAreaInputGUI extends \ilTextAreaInputGUI
      * @param string $errorMessage
      * @return void
      */
-    public function addRegex($pattern, $errorMessage): void
+    public function addRegex(string $pattern, string $errorMessage): void
     {
         $this->regex[] = [
             "pattern" => $pattern,

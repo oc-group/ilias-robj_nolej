@@ -10,6 +10,8 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+declare(strict_types=1);
+
 /**
  * Concepts Form GUI class.
  *
@@ -59,20 +61,20 @@ class ilNolejConceptsFormGUI extends ilNolejFormGUI
 
         $concepts = [];
 
-        $length = $form->getInput("concepts_count");
+        $length = (int) $form->getInput("concepts_count");
         for ($i = 0; $i < $length; $i++) {
             $id = $form->getInput("concept_{$i}_id");
             $enable = (bool) $form->getInput("concept_{$i}_enable");
-            $useForCW = (bool) $form->getInput("concept_{$i}_cw") ?? false;
-            $useForDTW = (bool) $form->getInput("concept_{$i}_dtw") ?? false;
-            $useForFTW = (bool) $form->getInput("concept_{$i}_ftw") ?? false;
-            $useForGaming = (bool) $form->getInput("concept_{$i}_gaming") ?? false;
-            $useForPractice = (bool) $form->getInput("concept_{$i}_practice") ?? false;
+            $useForCW = (bool) $form->getInput("concept_{$i}_cw");
+            $useForDTW = (bool) $form->getInput("concept_{$i}_dtw");
+            $useForFTW = (bool) $form->getInput("concept_{$i}_ftw");
+            $useForGaming = (bool) $form->getInput("concept_{$i}_gaming");
+            $useForPractice = (bool) $form->getInput("concept_{$i}_practice");
             $useForAssessment = false; // For legacy purpose.
             $label = $form->getInput("concept_{$i}_label");
             $language = $form->getInput("concept_{$i}_language");
             $definition = $form->getInput("concept_{$i}_definition");
-            $games = json_decode($form->getInput("concept_{$i}_games"));
+            $games = json_decode((string) $form->getInput("concept_{$i}_games"));
 
             if (!empty($id)) {
                 $concepts[] = [
@@ -96,7 +98,7 @@ class ilNolejConceptsFormGUI extends ilNolejFormGUI
 
         $success = $this->manager->writeDocumentFile(
             "concepts.json",
-            json_encode(["concepts" => $concepts])
+            (string) json_encode(["concepts" => $concepts])
         );
         if (!$success) {
             $this->tpl->setOnScreenMessage("failure", $this->plugin->txt("err_concepts_save"));
@@ -105,11 +107,10 @@ class ilNolejConceptsFormGUI extends ilNolejFormGUI
         }
 
         $success = $this->manager->putNolejContent("concepts", "concepts.json");
-        if (!$success) {
-            $this->tpl->setOnScreenMessage("failure", $this->plugin->txt("err_concepts_put"));
-        } else {
-            $this->tpl->setOnScreenMessage("success", $this->plugin->txt("concepts_saved"));
-        }
+        $this->tpl->setOnScreenMessage(
+            $success ? "success" : "failure",
+            $this->plugin->txt($success ? "concepts_saved" : "err_concepts_put")
+        );
         $this->showForm();
     }
 
@@ -118,7 +119,7 @@ class ilNolejConceptsFormGUI extends ilNolejFormGUI
      * @param bool $usePost Set value from POST, if false load concepts file
      * @return ilPropertyFormGUI
      */
-    protected function form($usePost = false): ilPropertyFormGUI
+    protected function form(bool $usePost = false): ilPropertyFormGUI
     {
         $form = new ilPropertyFormGUI();
         $form->setTitle($this->plugin->txt("review_concepts"));
@@ -135,22 +136,22 @@ class ilNolejConceptsFormGUI extends ilNolejFormGUI
 
         $length = count($concepts);
         $length_input = new ilHiddenInputGUI("concepts_count");
-        $length_input->setValue($length);
+        $length_input->setValue((string) $length);
         $form->addItem($length_input);
         for ($i = 0; $i < $length; $i++) {
             $section = new ilFormSectionHeaderGUI();
-            $section->setTitle($concepts[$i]->concept->label);
+            $section->setTitle((string) $concepts[$i]->concept->label);
             $form->addItem($section);
 
             $id = new ilHiddenInputGUI("concept_{$i}_id");
-            $id->setValue($concepts[$i]->id);
+            $id->setValue((string) $concepts[$i]->id);
             $form->addItem($id);
 
             $label = new ilTextInputGUI(
                 $this->plugin->txt("concepts_label"),
                 "concept_{$i}_label"
             );
-            $label->setValue($concepts[$i]->concept->label);
+            $label->setValue((string) $concepts[$i]->concept->label);
             $form->addItem($label);
 
             $enable = new ilCheckboxInputGUI(
@@ -188,7 +189,7 @@ class ilNolejConceptsFormGUI extends ilNolejFormGUI
                 "concept_{$i}_ftw"
             );
 
-            if ($availableGames != null && is_array($availableGames) && count($availableGames) > 0) {
+            if (!empty($availableGames) && is_array($availableGames)) {
                 $form->addItem($useForGaming);
 
                 if (in_array("cw", $concepts[$i]->concept->available_games)) {
@@ -211,32 +212,33 @@ class ilNolejConceptsFormGUI extends ilNolejFormGUI
             $form->addItem($useForPractice);
 
             $language = new ilHiddenInputGUI("concept_{$i}_language");
-            $language->setValue($concepts[$i]->concept->language);
+            $language->setValue((string) $concepts[$i]->concept->language);
             $form->addItem($language);
 
             $games = new ilHiddenInputGUI("concept_{$i}_games");
-            $games->setValue(json_encode($concepts[$i]->concept->available_games));
+            $games->setValue((string) json_encode($concepts[$i]->concept->available_games));
             $form->addItem($games);
 
             if ($usePost) {
-                $enable->setValueByArray($this->request->getParsedBody());
-                $useForCW->setValueByArray($this->request->getParsedBody());
-                $useForDTW->setValueByArray($this->request->getParsedBody());
-                $useForFTW->setValueByArray($this->request->getParsedBody());
-                $useForGaming->setValueByArray($this->request->getParsedBody());
-                $useForPractice->setValueByArray($this->request->getParsedBody());
-                // $useForAssessment->setValueByArray($this->request->getParsedBody());
-                $definition->setValueByArray($this->request->getParsedBody());
-            } else {
-                $enable->setChecked($concepts[$i]->enable);
-                $useForCW->setChecked($concepts[$i]->use_for_cw);
-                $useForDTW->setChecked($concepts[$i]->use_for_dtw);
-                $useForFTW->setChecked($concepts[$i]->use_for_ftw);
-                $useForGaming->setChecked($concepts[$i]->use_for_gaming);
-                $useForPractice->setChecked($concepts[$i]->use_for_practice);
-                // $useForAssessment->setChecked($concepts[$i]->use_for_assessment);
-                $definition->setValue($concepts[$i]->concept->definition);
+                $enable->setValueByArray($this->getPostData());
+                $useForCW->setValueByArray($this->getPostData());
+                $useForDTW->setValueByArray($this->getPostData());
+                $useForFTW->setValueByArray($this->getPostData());
+                $useForGaming->setValueByArray($this->getPostData());
+                $useForPractice->setValueByArray($this->getPostData());
+                // $useForAssessment->setValueByArray($this->getPostData());
+                $definition->setValueByArray($this->getPostData());
+                continue;
             }
+
+            $enable->setChecked((bool) $concepts[$i]->enable);
+            $useForCW->setChecked((bool) $concepts[$i]->use_for_cw);
+            $useForDTW->setChecked((bool) $concepts[$i]->use_for_dtw);
+            $useForFTW->setChecked((bool) $concepts[$i]->use_for_ftw);
+            $useForGaming->setChecked((bool) $concepts[$i]->use_for_gaming);
+            $useForPractice->setChecked((bool) $concepts[$i]->use_for_practice);
+            // $useForAssessment->setChecked($concepts[$i]->use_for_assessment);
+            $definition->setValue((string) $concepts[$i]->concept->definition);
         }
 
         $form->addCommandButton(self::CMD_SAVE, $this->lng->txt("save"));

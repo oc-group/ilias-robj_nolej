@@ -99,6 +99,8 @@ err_doc_response#:#C'è stato un errore durante la creazione del modulo NOLEJ:<b
 err_file_upload#:#Errore nel caricamento del file. Contattare un amministratore.
 err_ftb_missing_blank#:#Non sono presenti i 4 trattini bassi per l'attività Riempi gli spazi.
 err_h5p_content#:#Non è stato possibile caricare l'attività. Per favore, contatta un amministratore.
+err_h5p_not_active#:#Il plugin H5P non è attivo. Per favore, contatta un amministratore.
+err_h5p_not_installed#:#Il plugin H5P non è installato. Per favore, contatta un amministratore.
 err_h5p_package#:#non è un valido pacchetto H5P
 err_h5p_plugin#:#La versione del plugin H5P installata non è supportata. Per favore, aggiorna il plugin o contatta un amministratore.
 err_json_decode#:#non può decodificare il JSON

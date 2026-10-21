@@ -10,6 +10,8 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+declare(strict_types=1);
+
 /**
  * Summary Form GUI class.
  *
@@ -72,7 +74,7 @@ class ilNolejSummaryFormGUI extends ilNolejFormGUI
         ];
 
         // Summary.
-        $length = $form->getInput("summary_count");
+        $length = (int) $form->getInput("summary_count");
         for ($i = 0; $i < $length; $i++) {
             $title = $form->getInput("summary_{$i}_title");
             $txt = $form->getInput("summary_{$i}_text");
@@ -90,7 +92,7 @@ class ilNolejSummaryFormGUI extends ilNolejFormGUI
             : "";
 
         // Keypoints.
-        $length = $form->getInput("keypoints_count");
+        $length = (int) $form->getInput("keypoints_count");
         for ($i = 0; $i < $length; $i++) {
             $txt = $form->getInput("keypoints_{$i}");
             if (!empty($txt)) {
@@ -98,7 +100,7 @@ class ilNolejSummaryFormGUI extends ilNolejFormGUI
             }
         }
 
-        $success = $this->manager->writeDocumentFile("summary.json", json_encode($summary));
+        $success = $this->manager->writeDocumentFile("summary.json", (string) json_encode($summary));
         if (!$success) {
             $this->tpl->setOnScreenMessage("failure", $this->plugin->txt("err_summary_save"));
             $this->showForm();
@@ -106,11 +108,10 @@ class ilNolejSummaryFormGUI extends ilNolejFormGUI
         }
 
         $success = $this->manager->putNolejContent("summary", "summary.json");
-        if (!$success) {
-            $this->tpl->setOnScreenMessage("failure", $this->plugin->txt("err_summary_put"));
-        } else {
-            $this->tpl->setOnScreenMessage("success", $this->plugin->txt("summary_saved"));
-        }
+        $this->tpl->setOnScreenMessage(
+            $success ? "success" : "failure",
+            $this->plugin->txt($success ? "summary_saved" : "err_summary_put")
+        );
         $this->showForm();
     }
 
@@ -119,7 +120,7 @@ class ilNolejSummaryFormGUI extends ilNolejFormGUI
      * @param bool $usePost Set value from POST, otherwise load summary file
      * @return ilPropertyFormGUI
      */
-    protected function form($usePost = false): ilPropertyFormGUI
+    protected function form(bool $usePost = false): ilPropertyFormGUI
     {
         $form = new ilPropertyFormGUI();
 
@@ -138,7 +139,7 @@ class ilNolejSummaryFormGUI extends ilNolejFormGUI
         $form->addItem($section);
         $length = count($summary->summary);
         $length_input = new ilHiddenInputGUI("summary_count");
-        $length_input->setValue($length);
+        $length_input->setValue((string) $length);
         $form->addItem($length_input);
         for ($i = 0; $i < $length; $i++) {
             $title = new ilTextInputGUI(
@@ -156,12 +157,13 @@ class ilNolejSummaryFormGUI extends ilNolejFormGUI
             $form->addItem($txt);
 
             if ($usePost) {
-                $txt->setValueByArray($this->request->getParsedBody());
-                $title->setValueByArray($this->request->getParsedBody());
-            } else {
-                $txt->setValue($summary->summary[$i]->text);
-                $title->setValue($summary->summary[$i]->title);
+                $txt->setValueByArray($this->getPostData());
+                $title->setValueByArray($this->getPostData());
+                continue;
             }
+
+            $txt->setValue((string) $summary->summary[$i]->text);
+            $title->setValue((string) $summary->summary[$i]->title);
         }
 
         // Abstract.
@@ -172,9 +174,10 @@ class ilNolejSummaryFormGUI extends ilNolejFormGUI
             $txt = new ilTextAreaInputGUI("", "abstract");
             $txt->usePurifier(false);
             if ($usePost) {
-                $txt->setValueByArray($this->request->getParsedBody());
-            } else {
-                $txt->setValue($summary->abstract);
+                $txt->setValueByArray($this->getPostData());
+            }
+            if (!$usePost) {
+                $txt->setValue((string) $summary->abstract);
             }
             $txt->setRows(10);
             $form->addItem($txt);
@@ -186,15 +189,16 @@ class ilNolejSummaryFormGUI extends ilNolejFormGUI
         $form->addItem($section);
         $length = count($summary->keypoints);
         $length_input = new ilHiddenInputGUI("keypoints_count");
-        $length_input->setValue($length);
+        $length_input->setValue((string) $length);
         $form->addItem($length_input);
         for ($i = 0; $i < $length; $i++) {
             $txt = new ilTextAreaInputGUI("", "keypoints_{$i}");
             $txt->usePurifier(false);
             if ($usePost) {
-                $txt->setValueByArray($this->request->getParsedBody());
-            } else {
-                $txt->setValue($summary->keypoints[$i]);
+                $txt->setValueByArray($this->getPostData());
+            }
+            if (!$usePost) {
+                $txt->setValue((string) $summary->keypoints[$i]);
             }
             $txt->setRows(2);
             $form->addItem($txt);

@@ -10,6 +10,8 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+declare(strict_types=1);
+
 /**
  * Form GUI class.
  */
@@ -30,11 +32,20 @@ class ilNolejFormGUI
     /** @var ilDBInterface */
     protected ilDBInterface $db;
 
-    /** @var ilGlobalPageTemplate */
-    protected ilGlobalPageTemplate $tpl;
+    /** @var ilGlobalTemplateInterface */
+    protected ilGlobalTemplateInterface $tpl;
 
     /** @var \Psr\Http\Message\ServerRequestInterface */
-    protected $request;
+    protected \Psr\Http\Message\ServerRequestInterface $request;
+
+    /** @var \ILIAS\HTTP\Wrapper\RequestWrapper */
+    protected \ILIAS\HTTP\Wrapper\RequestWrapper $query;
+
+    /** @var \ILIAS\HTTP\Wrapper\RequestWrapper */
+    protected \ILIAS\HTTP\Wrapper\RequestWrapper $post;
+
+    /** @var \ILIAS\Refinery\Factory */
+    protected \ILIAS\Refinery\Factory $refinery;
 
     /** @var \ILIAS\UI\Renderer */
     protected \ILIAS\UI\Renderer $renderer;
@@ -43,13 +54,13 @@ class ilNolejFormGUI
     protected \ILIAS\UI\Factory $factory;
 
     /** @var ilNolejPlugin */
-    protected $plugin;
+    protected ilNolejPlugin $plugin;
 
     /** @var ilObjNolejGUI */
-    protected $obj_gui;
+    protected ilObjNolejGUI $obj_gui;
 
     /** @var ilNolejManagerGUI */
-    protected $manager;
+    protected ilNolejManagerGUI $manager;
 
     /** @var string */
     protected string $documentId = "";
@@ -58,10 +69,9 @@ class ilNolejFormGUI
     protected int $status = 0;
 
     /**
-     * @param ilObjNolejGUI $obj_gui
      * @param ilNolejManagerGUI $manager
      */
-    public function __construct($manager)
+    public function __construct(ilNolejManagerGUI $manager)
     {
         global $DIC;
         $this->ctrl = $DIC->ctrl();
@@ -69,6 +79,9 @@ class ilNolejFormGUI
         $this->lng = $DIC->language();
         $this->tpl = $DIC->ui()->mainTemplate();
         $this->request = $DIC->http()->request();
+        $this->query = $DIC->http()->wrapper()->query();
+        $this->post = $DIC->http()->wrapper()->post();
+        $this->refinery = $DIC->refinery();
         $this->factory = $DIC->ui()->factory();
         $this->renderer = $DIC->ui()->renderer();
 
@@ -78,8 +91,6 @@ class ilNolejFormGUI
 
         $this->documentId = $this->manager->documentId;
         $this->status = $this->manager->status;
-
-        include_once ilNolejPlugin::PLUGIN_DIR . "/classes/Form/Input/class.ilTextAreaInputGUI.php";
     }
 
     /**
@@ -129,6 +140,16 @@ class ilNolejFormGUI
     {
         // Implement in child classes.
         return new ilPropertyFormGUI();
+    }
+
+    /**
+     * Get the parsed POST body of the current request.
+     * @return array<string, mixed>
+     */
+    protected function getPostData(): array
+    {
+        $body = $this->request->getParsedBody();
+        return is_array($body) ? $body : [];
     }
 
     /**

@@ -10,6 +10,8 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+declare(strict_types=1);
+
 /**
  * Handles the presentation in container items (categories, courses, ...)
  * together with the corresponding ...Access class.
@@ -38,7 +40,7 @@ class ilObjNolejListGUI extends ilObjectPluginListGUI
 
     /**
      * Get commands
-     * @return array
+     * @return array<int, array<string, mixed>>
      */
     public function initCommands(): array
     {
@@ -73,7 +75,7 @@ class ilObjNolejListGUI extends ilObjectPluginListGUI
     /**
      * Get item properties
      *
-     * @return array of array properties:
+     * @return array<int, array<string, mixed>> of array properties:
      * - "alert" (boolean) => display as an alert property (usually in red)
      * - "property" (string) => property name
      * - "value" (string) => property value

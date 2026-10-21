@@ -10,7 +10,7 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-use ILIAS\GlobalScreen\Provider\PluginProviderCollection;
+declare(strict_types=1);
 
 /**
  * Plugin main class
@@ -50,82 +50,54 @@ class ilNolejPlugin extends ilRepositoryObjectPlugin
     /** @var string */
     public const TABLE_LP = "rep_robj_xnlj_lp";
 
-    /** @var self|null */
-    protected static $instance = null;
+    /** @var string id of the H5P repository object plugin */
+    public const H5P_PLUGIN_ID = "xhfp";
 
-    /** @var PluginProviderCollection|null */
-    protected static $pluginProviderCollection = null;
+    /** @var self|null */
+    protected static ?self $instance = null;
 
     /** @var ilLogger */
     public ilLogger $logger;
 
-    /** @var array */
-    protected static $config = [];
+    /** @var array<string, string> */
+    protected static array $config = [];
 
     /**
      * Initialize plugin.
      * @return void
      */
-    public function init(): void
+    protected function init(): void
     {
-        require_once self::PLUGIN_DIR . "/classes/class.ilNolejH5PIntegrationGUI.php";
-
         $this->logger = ilLoggerFactory::getLogger(self::PREFIX);
 
-        if (self::$instance == null) {
+        if (self::$instance === null) {
             self::$instance = $this;
         }
     }
 
     /**
-     * Exchange renderer after plugin initialization.
+     * Register the GlobalScreen notification provider.
+     *
+     * The provider cannot be registered in init(): for repository object plugins init()
+     * runs before the "global_screen" service exists. This hook runs once GlobalScreen is
+     * available, and the provider collection is read lazily, so registering here is safe.
+     * The renderer is returned unchanged.
+     *
      * @param \ILIAS\DI\Container $dic
      * @return Closure
      */
     public function exchangeUIRendererAfterInitialization(\ILIAS\DI\Container $dic): Closure
     {
-        if ($dic->offsetExists("global_screen")) {
-            // Add plugin providers.
-            self::$pluginProviderCollection = $this->getPluginProviderCollection(); // Fix overflow.
+        if (
+            isset($dic["global_screen"]) &&
+            $this->provider_collection->getNotificationProvider() === null
+        ) {
+            $this->provider_collection->setNotificationProvider(
+                new ilNolejNotificationProvider($dic, $this)
+            );
         }
 
-        /**
-         * Exchanges the default renderer instead of h5p plugin, if it is available, installed but not active.
-         * This needs to be done because this plugins should still be usable even if the
-         * main plugin is inactive. Since renderers are only exchanged if a plugin is
-         * active, we need to exchange the renderer here to cover this scenario.
-         * @see ilH5PPageComponentPlugin::exchangeUIRendererAfterInitialization
-         */
-        if (ilNolejH5PIntegrationGUI::isH5PInstalled() && !ilNolejH5PIntegrationGUI::isH5PActive()) {
-            $h5p = ilNolejH5PIntegrationGUI::getH5PPlugin();
-            return $h5p->exchangeUIRendererAfterInitialization($dic);
-        }
-
-        // Returns the default callable without executing it.
-        return $dic->raw("ui.renderer");
-    }
-
-    /**
-     * @return PluginProviderCollection
-     */
-    protected function getPluginProviderCollection()
-    {
-        global $DIC;
-
-        if (!isset($DIC["global_screen"])) {
-            return self::$pluginProviderCollection;
-        }
-
-        require_once self::PLUGIN_DIR . "/classes/Notification/class.ilNolejNotificationProvider.php";
-
-        if (self::$pluginProviderCollection === null) {
-            self::$pluginProviderCollection = new PluginProviderCollection();
-
-            // self::$pluginProviderCollection->setMetaBarProvider(new NolejMetaBarProvider($DIC, $this));
-            self::$pluginProviderCollection->setNotificationProvider(new ilNolejNotificationProvider($DIC, $this));
-        }
-
-        return self::$pluginProviderCollection;
+        return parent::exchangeUIRendererAfterInitialization($dic);
     }
 
     /**
@@ -135,11 +107,14 @@ class ilNolejPlugin extends ilRepositoryObjectPlugin
     {
         global $DIC;
 
-        if (self::$instance == null) {
-            /** @var ilComponentFactory */
+        if (self::$instance === null) {
+            /** @var ilComponentFactory $component_factory */
             $component_factory = $DIC["component.factory"];
 
             $plugin = $component_factory->getPlugin(self::PLUGIN_ID);
+            if (!$plugin instanceof self) {
+                throw new LogicException("Plugin " . self::PLUGIN_ID . " is not an " . self::class . ".");
+            }
             self::$instance = $plugin;
         }
 
@@ -157,12 +132,11 @@ class ilNolejPlugin extends ilRepositoryObjectPlugin
 
     /**
      * Returns a list of all repository object types which can be a parent of this type.
-     * @return array
+     * @return string[]
      */
     public function getParentTypes(): array
     {
-        $par_types = ["root", "cat", "crs", "grp", "fold", "lso", "prg"];
-        return $par_types;
+        return ["root", "cat", "crs", "grp", "fold", "lso", "prg"];
     }
 
     /**
@@ -180,9 +154,9 @@ class ilNolejPlugin extends ilRepositoryObjectPlugin
             self::TABLE_LP
         ];
 
-        for ($i = 0, $len = count($tables); $i < $len; $i++) {
-            if ($this->db->tableExists($tables[$i])) {
-                $this->db->dropTable($tables[$i]);
+        foreach ($tables as $table) {
+            if ($this->db->tableExists($table)) {
+                $this->db->dropTable($table);
             }
         }
     }
@@ -200,13 +174,11 @@ class ilNolejPlugin extends ilRepositoryObjectPlugin
      * Get the url to the plugin configuration GUI.
      * @return string
      */
-    public function getConfigurationLink()
+    public function getConfigurationLink(): string
     {
         global $DIC;
 
         $ctrl = $DIC->ctrl();
-
-        include_once self::PLUGIN_DIR . "/classes/class.ilNolejConfigGUI.php";
 
         $ctrl->setParameterByClass(ilNolejConfigGUI::class, "ref_id", "31");
         $ctrl->setParameterByClass(ilNolejConfigGUI::class, "ctype", "Services");
@@ -226,7 +198,7 @@ class ilNolejPlugin extends ilRepositoryObjectPlugin
      * @param string $defaultValue
      * @return string
      */
-    public static function getConfig($keyword, $defaultValue = "")
+    public static function getConfig(string $keyword, string $defaultValue = ""): string
     {
         global $DIC;
         $db = $DIC->database();
@@ -236,46 +208,91 @@ class ilNolejPlugin extends ilRepositoryObjectPlugin
         }
 
         $res = $db->queryF(
-            "SELECT `value` FROM " . self::TABLE_CONFIG . " WHERE keyword = %s;",
+            "SELECT value FROM " . self::TABLE_CONFIG . " WHERE keyword = %s",
             ["text"],
             [$keyword]
         );
 
-        if (!$res || $db->numRows($res) <= 0) {
+        $record = $db->fetchAssoc($res);
+        if (!is_array($record)) {
             return $defaultValue;
         }
 
-        $record = $db->fetchAssoc($res);
-        self::$config[$keyword] = $record["value"];
-        return $record["value"];
+        self::$config[$keyword] = (string) $record["value"];
+        return self::$config[$keyword];
     }
 
     /**
      * @param string $keyword
      * @param string $value
+     * @return void
      */
-    public static function saveConfig($keyword, $value)
+    public static function saveConfig(string $keyword, string $value): void
     {
         global $DIC;
         $db = $DIC->database();
 
         self::$config[$keyword] = $value;
 
-        $db->manipulateF(
-            "REPLACE INTO " . self::TABLE_CONFIG . " (keyword, value) VALUES (%s, %s);",
-            ["text", "text"],
-            [$keyword, $value]
+        $db->replace(
+            self::TABLE_CONFIG,
+            ["keyword" => ["text", $keyword]],
+            ["value" => ["text", $value]]
         );
     }
 
     /**
+     * Check if the H5P plugin is installed (it has an installed version).
+     * Does not load the H5P plugin.
+     * @return bool
+     */
+    public static function isH5PInstalled(): bool
+    {
+        global $DIC;
+        /** @var ilComponentRepository $component_repository */
+        $component_repository = $DIC["component.repository"];
+
+        return $component_repository->hasPluginId(self::H5P_PLUGIN_ID)
+            && $component_repository->getPluginById(self::H5P_PLUGIN_ID)->isInstalled();
+    }
+
+    /**
+     * Check if the H5P plugin is installed and active.
+     * Does not load the H5P plugin.
+     * @return bool
+     */
+    public static function isH5PActive(): bool
+    {
+        global $DIC;
+        /** @var ilComponentRepository $component_repository */
+        $component_repository = $DIC["component.repository"];
+
+        return $component_repository->hasPluginId(self::H5P_PLUGIN_ID)
+            && $component_repository->getPluginById(self::H5P_PLUGIN_ID)->isActive();
+    }
+
+    /**
+     * Get the H5P plugin object (an ilH5PPlugin).
+     * Only call it if isH5PInstalled() is true.
+     * @return ilPlugin
+     */
+    public static function getH5PPlugin(): ilPlugin
+    {
+        global $DIC;
+        /** @var ilComponentFactory $component_factory */
+        $component_factory = $DIC["component.factory"];
+
+        return $component_factory->getPlugin(self::H5P_PLUGIN_ID);
+    }
+
+    /**
      * Get the HTML of an H5P activity.
-     * @param int $contentId
+     * @param int|string $contentId
      * @param string $type
      * @param bool $editable
      * @return string html
      */
-    public static function renderH5P($contentId, string $type = "", bool $editable = false): string
+    public static function renderH5P(int|string $contentId, string $type = "", bool $editable = false): string
     {
         global $DIC;
 
@@ -290,9 +307,11 @@ class ilNolejPlugin extends ilRepositoryObjectPlugin
                 ["integer"],
                 [$contentId]
             );
-            if ($row = $db->fetchAssoc($result)) {
-                $objId = $row["id"];
-                $refId = reset(ilObject::_getAllReferences($objId));
+            $row = $db->fetchAssoc($result);
+            if (is_array($row)) {
+                $objId = (int) $row["id"];
+                $refIds = ilObject::_getAllReferences($objId);
+                $refId = (int) reset($refIds);
                 $obj_gui = new ilObjNolejGUI($refId);
                 $h5p = new ilNolejH5PIntegrationGUI($obj_gui);
                 return $h5p->getHTML((int) $contentId, $type, $editable);
@@ -311,7 +330,7 @@ class ilNolejPlugin extends ilRepositoryObjectPlugin
      * @param int $a_level (info, warning, error, debug)
      * @return void
      */
-    public function log($a_message, int $a_level = ilLogLevel::INFO): void
+    public function log(string $a_message, int $a_level = ilLogLevel::INFO): void
     {
         $this->logger->log($a_message, $a_level);
     }

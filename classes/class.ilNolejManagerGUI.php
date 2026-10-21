@@ -10,6 +10,8 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+declare(strict_types=1);
+
 use ILIAS\UI\Component\Listing\Workflow\Step;
 
 /**
@@ -75,14 +77,20 @@ class ilNolejManagerGUI
     /** @var ilLanguage */
     protected ilLanguage $lng;
 
-    /** @var ilGlobalPageTemplate */
-    protected ilGlobalPageTemplate $tpl;
+    /** @var ilGlobalTemplateInterface */
+    protected ilGlobalTemplateInterface $tpl;
 
     /** @var ilObjNolejGUI */
-    protected $obj_gui;
+    protected ilObjNolejGUI $obj_gui;
 
     /** @var ilNolejPlugin */
-    protected $plugin;
+    protected ilNolejPlugin $plugin;
+
+    /** @var \ILIAS\HTTP\Wrapper\RequestWrapper */
+    protected \ILIAS\HTTP\Wrapper\RequestWrapper $query;
+
+    /** @var \ILIAS\Refinery\Factory */
+    protected \ILIAS\Refinery\Factory $refinery;
 
     /** @var string */
     protected string $defaultClass = "";
@@ -98,9 +106,8 @@ class ilNolejManagerGUI
 
     /**
      * @param ilObjNolejGUI $obj_gui
-     * @param string|null $documentId
      */
-    public function __construct($obj_gui)
+    public function __construct(ilObjNolejGUI $obj_gui)
     {
         global $DIC;
         $this->ctrl = $DIC->ctrl();
@@ -108,18 +115,17 @@ class ilNolejManagerGUI
         $this->db = $DIC->database();
         $this->lng = $DIC->language();
         $this->tpl = $DIC->ui()->mainTemplate();
+        $this->query = $DIC->http()->wrapper()->query();
+        $this->refinery = $DIC->refinery();
 
         $this->plugin = ilNolejPlugin::getInstance();
 
         $this->lng->loadLanguageModule(ilNolejPlugin::PREFIX);
 
         $this->obj_gui = $obj_gui;
-        $this->documentId = $this->obj_gui->getObject()->getDocumentId();
-        $this->dataDir = $this->obj_gui->getObject()->getDataDir();
+        $this->documentId = $this->obj_gui->getNolejObject()->getDocumentId();
+        $this->dataDir = $this->obj_gui->getNolejObject()->getDataDir();
         $this->statusCheck();
-
-        require_once ilNolejPlugin::PLUGIN_DIR . "/classes/class.ilNolejAPI.php";
-        require_once ilNolejPlugin::PLUGIN_DIR . "/classes/class.ilNolejWebhook.php";
     }
 
     /**
@@ -127,7 +133,7 @@ class ilNolejManagerGUI
      * @param string $documentId
      * @return int
      */
-    public static function getObjIdFromDocumentId($documentId)
+    public static function getObjIdFromDocumentId(string $documentId): int
     {
         global $DIC;
 
@@ -138,7 +144,8 @@ class ilNolejManagerGUI
             ["text"],
             [$documentId]
         );
-        if ($row = $db->fetchAssoc($result)) {
+        $row = $db->fetchAssoc($result);
+        if (is_array($row)) {
             return (int) $row["id"];
         }
         return -1;
@@ -149,10 +156,11 @@ class ilNolejManagerGUI
      * @param string $documentId
      * @return self
      */
-    public static function getInstanceByDocumentId($documentId)
+    public static function getInstanceByDocumentId(string $documentId): self
     {
         $objId = self::getObjIdFromDocumentId($documentId);
-        $refId = reset(ilObject::_getAllReferences($objId));
+        $refIds = ilObject::_getAllReferences($objId);
+        $refId = (int) reset($refIds);
         $obj_gui = new ilObjNolejGUI($refId);
         return new self($obj_gui);
     }
@@ -169,8 +177,8 @@ class ilNolejManagerGUI
             return;
         }
 
-        $this->tpl->setTitle($this->obj_gui->getObject()->getTitle(), false);
-        $this->tpl->setDescription($this->obj_gui->getObject()->getDescription());
+        $this->tpl->setTitle($this->obj_gui->getNolejObject()->getTitle(), false);
+        $this->tpl->setDescription($this->obj_gui->getNolejObject()->getDescription());
 
         $next_class = $this->ctrl->getNextClass();
 
@@ -223,9 +231,9 @@ class ilNolejManagerGUI
      * Get status and set default cmd.
      * @return void
      */
-    protected function statusCheck()
+    protected function statusCheck(): void
     {
-        $this->status = $this->obj_gui->getObject()->getDocumentStatus();
+        $this->status = $this->obj_gui->getNolejObject()->getDocumentStatus();
 
         switch ($this->status) {
             case self::STATUS_CREATION:
@@ -255,7 +263,7 @@ class ilNolejManagerGUI
      * Get the current ObjectGUI.
      * @return ilObjNolejGUI
      */
-    public function getObjectGUI()
+    public function getObjectGUI(): ilObjNolejGUI
     {
         return $this->obj_gui;
     }
@@ -265,7 +273,7 @@ class ilNolejManagerGUI
      * @param int $status
      * @return bool
      */
-    public static function isStatusPending($status)
+    public static function isStatusPending(int $status): bool
     {
         return in_array(
             $status,
@@ -273,7 +281,8 @@ class ilNolejManagerGUI
                 self::STATUS_CREATION_PENDING,
                 self::STATUS_ANALYSIS_PENDING,
                 self::STATUS_ACTIVITIES_PENDING,
-            ]
+            ],
+            true
         );
     }
 
@@ -285,7 +294,6 @@ class ilNolejManagerGUI
     {
         if (!$this->isStatusPending($this->status)) {
             $this->ctrl->redirectByClass($this->defaultClass, ilNolejFormGUI::CMD_SHOW);
-            return;
         }
 
         $api = new ilNolejAPI();
@@ -307,125 +315,161 @@ class ilNolejManagerGUI
      * Get the activity management workflow, follows current status.
      * @return \ILIAS\UI\Component\Listing\Workflow\Linear
      */
-    public function getWorkflow()
+    public function getWorkflow(): \ILIAS\UI\Component\Listing\Workflow\Linear
     {
         global $DIC;
 
         $workflow = $DIC->ui()->factory()->listing()->workflow();
 
-        ilYuiUtil::initConnection($this->tpl);
         $this->tpl->addCss(ilNolejPlugin::PLUGIN_DIR . "/css/nolej.css");
 
         if ($this->isStatusPending($this->status)) {
-            $this->tpl->addJavaScript(ilNolejPlugin::PLUGIN_DIR . "/js/updates.js");
-            $interval = (int) $this->plugin->getConfig("interval", "1");
-
-            $this->ctrl->setParameter($this->obj_gui, "ref_id", $this->obj_gui->getObject()->getRefId());
-            $redirectToUrl = $this->ctrl->getLinkTarget($this->status == self::STATUS_ACTIVITIES_PENDING ? $this->obj_gui : $this);
-
-            $this->ctrl->setParameter($this, "document_id", $this->documentId);
-            $this->ctrl->setParameter($this, "status", $this->status);
-            $updateUrl = $this->ctrl->getLinkTarget($this, self::CMD_CHECK_UPDATES);
-
-            $this->tpl->addOnLoadCode("xnlj_check_updates('{$updateUrl}', '{$redirectToUrl}', {$interval});");
+            $this->addUpdatesCheck();
         }
 
         $steps = [
-            $workflow->step(
-                $this->plugin->txt("tab_creation"),
-                $this->status == self::STATUS_CREATION_PENDING
-                    ? self::glyphicon("refresh gly-spin") . $this->plugin->txt("action_transcription")
-                    : "",
-                $this->ctrl->getLinkTargetByClass([self::class, ilNolejCreationFormGUI::class], ilNolejCreationFormGUI::CMD_SHOW)
-            )
-                ->withAvailability(Step::AVAILABLE)
-                ->withStatus(
-                    $this->status <= self::STATUS_CREATION_PENDING
-                        ? Step::NOT_STARTED
-                        : Step::SUCCESSFULLY
-                ),
-            $workflow->step(
-                $this->plugin->txt("tab_analysis"),
-                $this->status == self::STATUS_ANALYSIS_PENDING
-                    ? self::glyphicon("refresh gly-spin") . $this->plugin->txt("action_analysis")
-                    : "",
-                $this->ctrl->getLinkTargetByClass([self::class, ilNolejTranscriptionFormGUI::class], ilNolejTranscriptionFormGUI::CMD_SHOW)
-            )
-                ->withAvailability(
-                    $this->status < self::STATUS_ANALYSIS
-                        ? Step::NOT_AVAILABLE
-                        : Step::AVAILABLE
-                )
-                ->withStatus(
-                    $this->status <= self::STATUS_ANALYSIS
-                        ? Step::NOT_STARTED
-                        : ($this->status == self::STATUS_ANALYSIS_PENDING ? Step::IN_PROGRESS : Step::SUCCESSFULLY)
-                ),
-            $workflow->step(
-                $this->plugin->txt("review_concepts"),
+            $this->workflowStep(
+                $workflow,
+                "tab_creation",
+                $this->status == self::STATUS_CREATION_PENDING ? "action_transcription" : "",
+                ilNolejCreationFormGUI::class,
+                ilNolejCreationFormGUI::CMD_SHOW,
+                Step::AVAILABLE,
+                $this->status <= self::STATUS_CREATION_PENDING ? Step::NOT_STARTED : Step::SUCCESSFULLY
+            ),
+            $this->workflowStep(
+                $workflow,
+                "tab_analysis",
+                $this->status == self::STATUS_ANALYSIS_PENDING ? "action_analysis" : "",
+                ilNolejTranscriptionFormGUI::class,
+                ilNolejTranscriptionFormGUI::CMD_SHOW,
+                $this->status < self::STATUS_ANALYSIS ? Step::NOT_AVAILABLE : Step::AVAILABLE,
+                $this->getAnalysisStepStatus()
+            ),
+            $this->workflowStep(
+                $workflow,
+                "review_concepts",
                 "",
-                $this->ctrl->getLinkTargetByClass([self::class, ilNolejConceptsFormGUI::class], ilNolejConceptsFormGUI::CMD_SHOW)
-            )
-                ->withAvailability(
-                    $this->status < self::STATUS_REVISION
-                        ? Step::NOT_AVAILABLE
-                        : Step::AVAILABLE
-                )
-                ->withStatus(
-                    $this->status <= self::STATUS_REVISION
-                        ? Step::NOT_STARTED
-                        : Step::IN_PROGRESS
-                ),
-            $workflow->step(
-                $this->plugin->txt("review_questions"),
+                ilNolejConceptsFormGUI::class,
+                ilNolejConceptsFormGUI::CMD_SHOW,
+                $this->getReviewStepAvailability(),
+                $this->getReviewStepStatus()
+            ),
+            $this->workflowStep(
+                $workflow,
+                "review_questions",
                 "",
-                $this->ctrl->getLinkTargetByClass([self::class, ilNolejQuestionsFormGUI::class], ilNolejQuestionsFormGUI::CMD_SHOW)
-            )
-                ->withAvailability(
-                    $this->status < self::STATUS_REVISION
-                        ? Step::NOT_AVAILABLE
-                        : Step::AVAILABLE
-                )
-                ->withStatus(
-                    $this->status <= self::STATUS_REVISION
-                        ? Step::NOT_STARTED
-                        : Step::IN_PROGRESS
-                ),
-            $workflow->step(
-                $this->plugin->txt("review_summary"),
+                ilNolejQuestionsFormGUI::class,
+                ilNolejQuestionsFormGUI::CMD_SHOW,
+                $this->getReviewStepAvailability(),
+                $this->getReviewStepStatus()
+            ),
+            $this->workflowStep(
+                $workflow,
+                "review_summary",
                 "",
-                $this->ctrl->getLinkTargetByClass([self::class, ilNolejSummaryFormGUI::class], ilNolejSummaryFormGUI::CMD_SHOW)
-            )
-                ->withAvailability(
-                    $this->status < self::STATUS_REVISION
-                        ? Step::NOT_AVAILABLE
-                        : Step::AVAILABLE
-                )
-                ->withStatus(
-                    $this->status <= self::STATUS_REVISION
-                        ? Step::NOT_STARTED
-                        : Step::IN_PROGRESS
-                ),
-            $workflow->step(
-                $this->plugin->txt("tab_activities"),
-                $this->status == self::STATUS_ACTIVITIES_PENDING
-                    ? self::glyphicon("refresh gly-spin") . $this->plugin->txt("action_activities")
-                    : "",
-                $this->ctrl->getLinkTargetByClass([self::class, ilNolejActivitiesFormGUI::class], ilNolejFormGUI::CMD_SHOW)
-            )
-                ->withAvailability(
-                    $this->status < self::STATUS_REVISION
-                        ? Step::NOT_AVAILABLE
-                        : Step::AVAILABLE
-                )
-                ->withStatus(
-                    $this->status <= self::STATUS_REVISION
-                        ? Step::NOT_STARTED
-                        : Step::IN_PROGRESS
-                ),
+                ilNolejSummaryFormGUI::class,
+                ilNolejSummaryFormGUI::CMD_SHOW,
+                $this->getReviewStepAvailability(),
+                $this->getReviewStepStatus()
+            ),
+            $this->workflowStep(
+                $workflow,
+                "tab_activities",
+                $this->status == self::STATUS_ACTIVITIES_PENDING ? "action_activities" : "",
+                ilNolejActivitiesFormGUI::class,
+                ilNolejFormGUI::CMD_SHOW,
+                $this->getReviewStepAvailability(),
+                $this->getReviewStepStatus()
+            ),
         ];
 
         return $workflow->linear($this->plugin->txt("tab_activity_management"), $steps);
+    }
+
+    /**
+     * Add the javascript that polls for status updates, while the status is pending.
+     * @return void
+     */
+    protected function addUpdatesCheck(): void
+    {
+        $this->tpl->addJavaScript(ilNolejPlugin::PLUGIN_DIR . "/js/updates.js");
+        $interval = (int) $this->plugin->getConfig("interval", "1");
+
+        $this->ctrl->setParameter($this->obj_gui, "ref_id", $this->obj_gui->getNolejObject()->getRefId());
+        $redirectToUrl = $this->ctrl->getLinkTarget(
+            $this->status == self::STATUS_ACTIVITIES_PENDING ? $this->obj_gui : $this
+        );
+
+        $this->ctrl->setParameter($this, "document_id", $this->documentId);
+        $this->ctrl->setParameter($this, "status", $this->status);
+        $updateUrl = $this->ctrl->getLinkTarget($this, self::CMD_CHECK_UPDATES);
+
+        $this->tpl->addOnLoadCode("xnlj_check_updates('{$updateUrl}', '{$redirectToUrl}', {$interval});");
+    }
+
+    /**
+     * Build a step of the workflow.
+     * @param \ILIAS\UI\Component\Listing\Workflow\Factory $workflow
+     * @param string $labelKey language key of the label
+     * @param string $pendingKey language key of the pending text, empty if not pending
+     * @param string $formClass class of the form GUI the step links to
+     * @param string $formCmd command of the form GUI the step links to
+     * @param int $availability
+     * @param int $stepStatus
+     * @return Step
+     */
+    protected function workflowStep(
+        $workflow,
+        string $labelKey,
+        string $pendingKey,
+        string $formClass,
+        string $formCmd,
+        int $availability,
+        int $stepStatus
+    ): Step {
+        $step = $workflow->step(
+            $this->plugin->txt($labelKey),
+            $pendingKey !== ""
+                ? self::glyphicon("refresh gly-spin") . $this->plugin->txt($pendingKey)
+                : "",
+            $this->ctrl->getLinkTargetByClass([self::class, $formClass], $formCmd)
+        );
+
+        return $step
+            ->withAvailability($availability)
+            ->withStatus($stepStatus);
+    }
+
+    /**
+     * Status of the analysis step.
+     * @return int
+     */
+    protected function getAnalysisStepStatus(): int
+    {
+        if ($this->status <= self::STATUS_ANALYSIS) {
+            return Step::NOT_STARTED;
+        }
+
+        return $this->status == self::STATUS_ANALYSIS_PENDING ? Step::IN_PROGRESS : Step::SUCCESSFULLY;
+    }
+
+    /**
+     * Availability of the review steps (concepts, questions, summary, activities).
+     * @return int
+     */
+    protected function getReviewStepAvailability(): int
+    {
+        return $this->status < self::STATUS_REVISION ? Step::NOT_AVAILABLE : Step::AVAILABLE;
+    }
+
+    /**
+     * Status of the review steps (concepts, questions, summary, activities).
+     * @return int
+     */
+    protected function getReviewStepStatus(): int
+    {
+        return $this->status <= self::STATUS_REVISION ? Step::NOT_STARTED : Step::IN_PROGRESS;
     }
 
     /**
@@ -433,7 +477,7 @@ class ilNolejManagerGUI
      * @param string $id
      * @return string
      */
-    public static function glyphicon($id)
+    public static function glyphicon(string $id): string
     {
         return "<span class=\"glyphicon glyphicon-{$id}\" aria-hidden=\"true\"></span> ";
     }
@@ -447,27 +491,27 @@ class ilNolejManagerGUI
     protected function checkUpdates(): void
     {
         // Required params.
-        if (!isset($_GET["document_id"], $_GET["status"])) {
+        if (!$this->query->has("document_id") || !$this->query->has("status")) {
             exit(0);
         }
 
-        $documentId = $_GET["document_id"];
-        $currentStatus = $_GET["status"];
+        $documentId = $this->query->retrieve("document_id", $this->refinery->kindlyTo()->string());
+        $currentStatus = $this->query->retrieve("status", $this->refinery->kindlyTo()->int());
 
         // Fetch document data.
         $set = $this->db->queryF(
-            "SELECT `status` FROM " . ilNolejPlugin::TABLE_DOC . " WHERE document_id = %s;",
+            "SELECT status FROM " . ilNolejPlugin::TABLE_DOC . " WHERE document_id = %s",
             ["text"],
             [$documentId]
         );
 
         $row = $this->db->fetchAssoc($set);
-        if (!$row) {
+        if (!is_array($row)) {
             // Document not found.
             exit(0);
         }
 
-        if ($row["status"] != $currentStatus) {
+        if ((int) $row["status"] !== $currentStatus) {
             // Document updated.
             echo "update";
         }
@@ -476,13 +520,12 @@ class ilNolejManagerGUI
     }
 
     /**
-     * Read a file of the current document, if exists.
+     * Check if a file of the current document exists.
      *
      * @param string $filename the name of the file.
-     * @return string|false return the content if the file exists,
-     *   false otherwise.
+     * @return bool true if the file exists, false otherwise.
      */
-    public function hasDocumentFile($filename)
+    public function hasDocumentFile(string $filename): bool
     {
         return file_exists($this->dataDir . "/" . $filename);
     }
@@ -494,9 +537,10 @@ class ilNolejManagerGUI
      * @return string|false return the content if the file exists,
      *   false otherwise.
      */
-    public function readDocumentFile($filename)
+    public function readDocumentFile(string $filename): string|false
     {
-        return file_get_contents($this->dataDir . "/" . $filename);
+        $path = $this->dataDir . "/" . $filename;
+        return is_file($path) ? file_get_contents($path) : false;
     }
 
     /**
@@ -508,7 +552,7 @@ class ilNolejManagerGUI
      *
      * @return bool returns true on success, false on failure.
      */
-    public function writeDocumentFile($filename, $content)
+    public function writeDocumentFile(string $filename, string $content): bool
     {
         if (!is_dir($this->dataDir)) {
             mkdir($this->dataDir, 0775, true);
@@ -531,19 +575,21 @@ class ilNolejManagerGUI
      *
      * @return bool|string return true on success, false on failure. If $saveAs
      * is null, then the content is returned as string.
+     * @phpstan-return ($saveAs is null ? string : bool)
+     * @psalm-return ($saveAs is null ? string : bool)
      */
     public function getNolejContent(
-        $pathname,
-        $saveAs = null,
-        $forceDownload = false,
+        string $pathname,
+        ?string $saveAs = null,
+        bool $forceDownload = false,
         $withData = "",
-        $encode = false
-    ) {
+        bool $encode = false
+    ): bool|string {
         $filepath = $this->dataDir . "/" . $saveAs;
         $api = new ilNolejAPI();
 
         if (
-            $saveAs != null &&
+            $saveAs !== null &&
             !$forceDownload &&
             is_file($filepath)
         ) {
@@ -557,9 +603,9 @@ class ilNolejManagerGUI
             false
         );
 
-        return $saveAs == null
+        return $saveAs === null
             ? $result
-            : $this->writeDocumentFile($saveAs, $result);
+            : $this->writeDocumentFile($saveAs, (string) $result);
     }
 
     /**
@@ -570,7 +616,7 @@ class ilNolejManagerGUI
      *
      * @return bool true on success, false on failure
      */
-    public function putNolejContent($pathname, $filename)
+    public function putNolejContent(string $pathname, string $filename): bool
     {
         $content = $this->readDocumentFile($filename);
         if (!$content) {
@@ -579,7 +625,7 @@ class ilNolejManagerGUI
 
         $api = new ilNolejAPI();
 
-        $result = $api->put(
+        $api->put(
             "/documents/{$this->documentId}/{$pathname}",
             $content
         );
@@ -592,7 +638,7 @@ class ilNolejManagerGUI
      * @param int $newStatus
      * @return void
      */
-    public function updateDocumentStatus($newStatus)
+    public function updateDocumentStatus(int $newStatus): void
     {
         $this->db->manipulateF(
             "UPDATE " . ilNolejPlugin::TABLE_DOC
@@ -607,9 +653,9 @@ class ilNolejManagerGUI
      * Download and import H5P activities
      * @return string failed imports.
      */
-    public function downloadActivities()
+    public function downloadActivities(): string
     {
-        if (!ilNolejH5PIntegrationGUI::isH5PInstalled()) {
+        if (!ilNolejPlugin::isH5PInstalled()) {
             return $this->plugin->txt("err_h5p_not_installed");
         }
 
@@ -637,9 +683,13 @@ class ilNolejManagerGUI
             return $this->plugin->txt("err_json_decode");
         }
         $activities = json_decode($json);
+        if (!is_object($activities) || !is_array($activities->activities ?? null)) {
+            // Error response (e.g. invalid API key) or unexpected payload.
+            return $this->plugin->txt("err_json_decode");
+        }
         $errorMessages = [];
 
-        $now = strtotime("now");
+        $now = time();
         foreach ($activities->activities as $activity) {
             $path = "{$h5pDir}/{$activity->activity_name}.h5p";
 
@@ -664,8 +714,14 @@ class ilNolejManagerGUI
      * @param int $attemptsLeft
      * @return string error message. Empty string if succedeed.
      */
-    protected function downloadAndImportH5PContent($path, $url, $h5pDir, $type, $time, $attemptsLeft)
-    {
+    protected function downloadAndImportH5PContent(
+        string $path,
+        string $url,
+        string $h5pDir,
+        string $type,
+        int $time,
+        int $attemptsLeft
+    ): string {
         if ($attemptsLeft != self::MAX_ATTEMPTS) {
             $this->plugin->log("Retrying to import H5P activity {$type} of document {$this->documentId}...");
         }
@@ -675,7 +731,7 @@ class ilNolejManagerGUI
         // Download activity.
         file_put_contents(
             $path,
-            file_get_contents($url)
+            (string) file_get_contents($url)
         );
 
         $errorMessage = $this->importH5PContent($h5pDir, $type, $time);
@@ -694,13 +750,13 @@ class ilNolejManagerGUI
      * @param int $time
      * @return string error message. Empty string if succedeed.
      */
-    protected function importH5PContent($h5pDir, $type, $time)
+    protected function importH5PContent(string $h5pDir, string $type, int $time): string
     {
         $this->plugin->log("Importing H5P activity {$type} of document {$this->documentId}...");
 
-        $filepath = substr("{$h5pDir}/{$type}.h5p", 1);
+        $filepath = "{$h5pDir}/{$type}.h5p";
 
-        if (!ilNolejH5PIntegrationGUI::isH5PInstalled()) {
+        if (!ilNolejPlugin::isH5PInstalled()) {
             return $this->plugin->txt("err_h5p_not_installed");
         }
 
@@ -718,17 +774,14 @@ class ilNolejManagerGUI
             return $this->plugin->txt("err_h5p_package");
         }
 
-        if (null === $contentId) {
-            $this->plugin->log("Import failed {$type} of document {$this->documentId}");
-            return $this->plugin->txt("err_content_id");
-        }
-
-        $this->db->manipulateF(
-            "INSERT INTO " . ilNolejPlugin::TABLE_H5P
-            . " (document_id, type, `generated`, content_id)"
-            . " VALUES (%s, %s, %s, %s);",
-            ["text", "text", "integer", "integer"],
-            [$this->documentId, $type, $time, $contentId]
+        $this->db->insert(
+            ilNolejPlugin::TABLE_H5P,
+            [
+                "document_id" => ["text", $this->documentId],
+                "type" => ["text", $type],
+                "generated" => ["integer", $time],
+                "content_id" => ["integer", $contentId],
+            ]
         );
 
         $this->plugin->log("Import completed {$type} of document {$this->documentId}");

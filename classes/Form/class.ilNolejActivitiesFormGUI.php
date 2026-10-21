@@ -10,6 +10,8 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+declare(strict_types=1);
+
 /**
  * Activities settings Form GUI class.
  *
@@ -17,6 +19,57 @@
  */
 class ilNolejActivitiesFormGUI extends ilNolejFormGUI
 {
+    /**
+     * Settings of every activity type.
+     *
+     * - "ibook": name of the checkbox (and of the setting) to include the activity in the interactive book.
+     * - "number": [name prefix, language key of the label, minimum value]; the current value is stored
+     *   in the setting "<prefix>_current", the maximum value is read from "<prefix>_max".
+     *
+     * @var array<string, array{ibook?: string, number?: array{0: string, 1: string, 2: int}}>
+     */
+    protected const ACTIVITY_SETTINGS = [
+        "ibook" => [],
+        "glossary" => [
+            "ibook" => "Glossary_include_IB",
+        ],
+        "summary" => [
+            "ibook" => "Summary_include_IB",
+        ],
+        "findtheword" => [
+            "number" => ["FTW_number_word", "activities_ftw_words", 3],
+        ],
+        "dragtheword" => [
+            "ibook" => "DTW_include_IB",
+            "number" => ["DTW_number_word", "activities_dtw_words", 3],
+        ],
+        "crossword" => [
+            "number" => ["CW_number_word", "activities_cw_words", 3],
+        ],
+        "practice" => [
+            "ibook" => "Practice_include_IB",
+            "number" => ["Practice_number_flashcard", "activities_practice_flashcards", 0],
+        ],
+        "practiceq" => [
+            "ibook" => "PracticeQ_include_IB",
+            "number" => ["PracticeQ_number_flashcard", "activities_practiceq_flashcards", 0],
+        ],
+        "grade" => [
+            "ibook" => "Grade_include_IB",
+            "number" => ["Grade_number_question", "activities_grade_questions", 0],
+        ],
+        "gradeq" => [
+            "ibook" => "GradeQ_include_IB",
+            "number" => ["GradeQ_number_question", "activities_gradeq_questions", 0],
+        ],
+        "flashcards" => [
+            "number" => ["Flashcards_number_flashcard", "activities_flashcards_flashcards", 0],
+        ],
+        "ivideo" => [
+            "number" => ["IV_number_question_perset", "activities_ivideo_questions", 0],
+        ],
+    ];
+
     /**
      * Show activities form.
      * @return void
@@ -83,85 +136,27 @@ class ilNolejActivitiesFormGUI extends ilNolejFormGUI
             "desired_packages" => [],
         ];
 
-        for ($i = 0, $len = count($availableActivities); $i < $len; $i++) {
-            $useActivity = (bool) $form->getInput("activity_" . $availableActivities[$i]);
+        foreach ($availableActivities as $activity) {
+            $useActivity = (bool) $form->getInput("activity_" . $activity);
             if (!$useActivity) {
                 continue;
             }
 
-            $settingsToSave["desired_packages"][] = $availableActivities[$i];
+            $settingsToSave["desired_packages"][] = $activity;
 
-            switch ($availableActivities[$i]) {
-                case "glossary":
-                    $ibook = (bool) $form->getInput("Glossary_include_IB");
-                    $settingsToSave["settings"]["Glossary_include_IB"] = $ibook;
-                    break;
-
-                case "summary":
-                    $ibook = (bool) $form->getInput("Summary_include_IB");
-                    $settingsToSave["settings"]["Summary_include_IB"] = $ibook;
-                    break;
-
-                case "findtheword":
-                    $number = (int) $form->getInput("FTW_number_word_current");
-                    $settingsToSave["settings"]["FTW_number_word_current"] = $number;
-                    break;
-
-                case "dragtheword":
-                    $ibook = (bool) $form->getInput("DTW_include_IB");
-                    $settingsToSave["settings"]["DTW_include_IB"] = $ibook;
-                    $number = (int) $form->getInput("DTW_number_word_current");
-                    $settingsToSave["settings"]["DTW_number_word_current"] = $number;
-                    break;
-
-                case "crossword":
-                    $number = (int) $form->getInput("CW_number_word_current");
-                    $settingsToSave["settings"]["CW_number_word_current"] = $number;
-                    break;
-
-                case "practice":
-                    $ibook = (bool) $form->getInput("Practice_include_IB");
-                    $settingsToSave["settings"]["Practice_include_IB"] = $ibook;
-                    $number = (int) $form->getInput("Practice_number_flashcard_current");
-                    $settingsToSave["settings"]["Practice_number_flashcard_current"] = $number;
-                    break;
-
-                case "practiceq":
-                    $ibook = (bool) $form->getInput("PracticeQ_include_IB");
-                    $settingsToSave["settings"]["PracticeQ_include_IB"] = $ibook;
-                    $number = (int) $form->getInput("PracticeQ_number_flashcard_current");
-                    $settingsToSave["settings"]["PracticeQ_number_flashcard_current"] = $number;
-                    break;
-
-                case "grade":
-                    $ibook = (bool) $form->getInput("Grade_include_IB");
-                    $settingsToSave["settings"]["Grade_include_IB"] = $ibook;
-                    $number = (int) $form->getInput("Grade_number_question_current");
-                    $settingsToSave["settings"]["Grade_number_question_current"] = $number;
-                    break;
-
-                case "gradeq":
-                    $ibook = (bool) $form->getInput("GradeQ_include_IB");
-                    $settingsToSave["settings"]["GradeQ_include_IB"] = $ibook;
-                    $number = (int) $form->getInput("GradeQ_number_question_current");
-                    $settingsToSave["settings"]["GradeQ_number_question_current"] = $number;
-                    break;
-
-                case "flashcards":
-                    $number = (int) $form->getInput("Flashcards_number_flashcard_current");
-                    $settingsToSave["settings"]["Flashcards_number_flashcard_current"] = $number;
-                    break;
-
-                case "ivideo":
-                    $number = (int) $form->getInput("IV_number_question_perset_current");
-                    $settingsToSave["settings"]["IV_number_question_perset_current"] = $number;
-                    break;
+            $activitySettings = self::ACTIVITY_SETTINGS[$activity] ?? [];
+            if (isset($activitySettings["ibook"])) {
+                $settingsToSave["settings"][$activitySettings["ibook"]] = (bool) $form->getInput($activitySettings["ibook"]);
+            }
+            if (isset($activitySettings["number"])) {
+                $name = $activitySettings["number"][0] . "_current";
+                $settingsToSave["settings"][$name] = (int) $form->getInput($name);
             }
         }
 
         $success = $this->manager->writeDocumentFile(
             "settings.json",
-            json_encode($settingsToSave)
+            (string) json_encode($settingsToSave)
         );
         if (!$success) {
             $this->tpl->setOnScreenMessage("failure", $this->plugin->txt("err_settings_save"));
@@ -194,7 +189,7 @@ class ilNolejActivitiesFormGUI extends ilNolejFormGUI
      * @param bool $usePost Set value from POST, if false load activities file
      * @return ilPropertyFormGUI
      */
-    protected function form($usePost = false): ilPropertyFormGUI
+    protected function form(bool $usePost = false): ilPropertyFormGUI
     {
         $form = new ilPropertyFormGUI();
         $form->setTitle($this->plugin->txt("activities_settings"));
@@ -210,232 +205,20 @@ class ilNolejActivitiesFormGUI extends ilNolejFormGUI
         $availableActivities = $settings->avaible_packages ?? [];
         $settings = $settings->settings;
 
-        for ($i = 0, $len = count($availableActivities); $i < $len; $i++) {
+        foreach ($availableActivities as $availableActivity) {
             $activity = new ilCheckboxInputGUI(
-                $this->plugin->txt("activities_" . $availableActivities[$i]),
-                "activity_" . $availableActivities[$i]
+                $this->plugin->txt("activities_" . $availableActivity),
+                "activity_" . $availableActivity
             );
 
             if ($usePost) {
-                $activity->setValueByArray($this->request->getParsedBody());
-            } else {
+                $activity->setValueByArray($this->getPostData());
+            }
+            if (!$usePost) {
                 $activity->setChecked(true);
             }
 
-            switch ($availableActivities[$i]) {
-                case "ibook":
-                    break;
-
-                case "glossary":
-                    $ibook = new ilCheckboxInputGUI(
-                        $this->plugin->txt("activities_use_in_ibook"),
-                        "Glossary_include_IB"
-                    );
-                    if ($usePost) {
-                        $ibook->setValueByArray($this->request->getParsedBody());
-                    } else {
-                        $ibook->setChecked($settings->Glossary_include_IB);
-                    }
-                    $activity->addSubItem($ibook);
-                    break;
-
-                case "summary":
-                    $ibook = new ilCheckboxInputGUI(
-                        $this->plugin->txt("activities_use_in_ibook"),
-                        "Summary_include_IB"
-                    );
-                    if ($usePost) {
-                        $ibook->setValueByArray($this->request->getParsedBody());
-                    } else {
-                        $ibook->setChecked($settings->Summary_include_IB);
-                    }
-                    $activity->addSubItem($ibook);
-                    break;
-
-                case "findtheword":
-                    $number = new ilNumberInputGUI(
-                        $this->plugin->txt("activities_ftw_words"),
-                        "FTW_number_word_current"
-                    );
-                    $number->allowDecimals(false);
-                    $number->setMinValue(3, true);
-                    $number->setMaxValue($settings->FTW_number_word_max, true);
-                    if ($usePost) {
-                        $number->setValueByArray($this->request->getParsedBody());
-                    } else {
-                        $number->setValue($settings->FTW_number_word_current);
-                    }
-                    $activity->addSubItem($number);
-                    break;
-
-                case "dragtheword":
-                    $ibook = new ilCheckboxInputGUI(
-                        $this->plugin->txt("activities_use_in_ibook"),
-                        "DTW_include_IB"
-                    );
-
-                    $number = new ilNumberInputGUI(
-                        $this->plugin->txt("activities_dtw_words"),
-                        "DTW_number_word_current"
-                    );
-                    $number->allowDecimals(false);
-                    $number->setMinValue(3, true);
-                    $number->setMaxValue($settings->DTW_number_word_max, true);
-                    if ($usePost) {
-                        $ibook->setValueByArray($this->request->getParsedBody());
-                        $number->setValueByArray($this->request->getParsedBody());
-                    } else {
-                        $ibook->setChecked($settings->DTW_include_IB);
-                        $number->setValue($settings->DTW_number_word_current);
-                    }
-                    $activity->addSubItem($ibook);
-                    $activity->addSubItem($number);
-                    break;
-
-                case "crossword":
-                    $number = new ilNumberInputGUI(
-                        $this->plugin->txt("activities_cw_words"),
-                        "CW_number_word_current"
-                    );
-                    $number->allowDecimals(false);
-                    $number->setMinValue(3, true);
-                    $number->setMaxValue($settings->CW_number_word_max, true);
-                    if ($usePost) {
-                        $number->setValueByArray($this->request->getParsedBody());
-                    } else {
-                        $number->setValue($settings->CW_number_word_current);
-                    }
-                    $activity->addSubItem($number);
-                    break;
-
-                case "practice":
-                    $ibook = new ilCheckboxInputGUI(
-                        $this->plugin->txt("activities_use_in_ibook"),
-                        "Practice_include_IB"
-                    );
-
-                    $number = new ilNumberInputGUI(
-                        $this->plugin->txt("activities_practice_flashcards"),
-                        "Practice_number_flashcard_current"
-                    );
-                    $number->allowDecimals(false);
-                    $number->setMinValue(0, true);
-                    $number->setMaxValue($settings->Practice_number_flashcard_max, true);
-                    if ($usePost) {
-                        $ibook->setValueByArray($this->request->getParsedBody());
-                        $number->setValueByArray($this->request->getParsedBody());
-                    } else {
-                        $ibook->setChecked($settings->Practice_include_IB);
-                        $number->setValue($settings->Practice_number_flashcard_current);
-                    }
-                    $activity->addSubItem($ibook);
-                    $activity->addSubItem($number);
-                    break;
-
-                case "practiceq":
-                    $ibook = new ilCheckboxInputGUI(
-                        $this->plugin->txt("activities_use_in_ibook"),
-                        "PracticeQ_include_IB"
-                    );
-
-                    $number = new ilNumberInputGUI(
-                        $this->plugin->txt("activities_practiceq_flashcards"),
-                        "PracticeQ_number_flashcard_current"
-                    );
-                    $number->allowDecimals(false);
-                    $number->setMinValue(0, true);
-                    $number->setMaxValue($settings->PracticeQ_number_flashcard_max, true);
-                    if ($usePost) {
-                        $ibook->setValueByArray($this->request->getParsedBody());
-                        $number->setValueByArray($this->request->getParsedBody());
-                    } else {
-                        $ibook->setChecked($settings->PracticeQ_include_IB);
-                        $number->setValue($settings->PracticeQ_number_flashcard_current);
-                    }
-                    $activity->addSubItem($ibook);
-                    $activity->addSubItem($number);
-                    break;
-
-                case "grade":
-                    $ibook = new ilCheckboxInputGUI(
-                        $this->plugin->txt("activities_use_in_ibook"),
-                        "Grade_include_IB"
-                    );
-
-                    $number = new ilNumberInputGUI(
-                        $this->plugin->txt("activities_grade_questions"),
-                        "Grade_number_question_current"
-                    );
-                    $number->allowDecimals(false);
-                    $number->setMinValue(0, true);
-                    $number->setMaxValue($settings->Grade_number_question_max, true);
-                    if ($usePost) {
-                        $ibook->setValueByArray($this->request->getParsedBody());
-                        $number->setValueByArray($this->request->getParsedBody());
-                    } else {
-                        $ibook->setChecked($settings->Grade_include_IB);
-                        $number->setValue($settings->Grade_number_question_current);
-                    }
-                    $activity->addSubItem($ibook);
-                    $activity->addSubItem($number);
-                    break;
-
-                case "gradeq":
-                    $ibook = new ilCheckboxInputGUI(
-                        $this->plugin->txt("activities_use_in_ibook"),
-                        "GradeQ_include_IB"
-                    );
-
-                    $number = new ilNumberInputGUI(
-                        $this->plugin->txt("activities_gradeq_questions"),
-                        "GradeQ_number_question_current"
-                    );
-                    $number->allowDecimals(false);
-                    $number->setMinValue(0, true);
-                    $number->setMaxValue($settings->GradeQ_number_question_max, true);
-                    if ($usePost) {
-                        $ibook->setValueByArray($this->request->getParsedBody());
-                        $number->setValueByArray($this->request->getParsedBody());
-                    } else {
-                        $ibook->setChecked($settings->GradeQ_include_IB);
-                        $number->setValue($settings->GradeQ_number_question_current);
-                    }
-                    $activity->addSubItem($ibook);
-                    $activity->addSubItem($number);
-                    break;
-
-                case "flashcards":
-                    $number = new ilNumberInputGUI(
-                        $this->plugin->txt("activities_flashcards_flashcards"),
-                        "Flashcards_number_flashcard_current"
-                    );
-                    $number->allowDecimals(false);
-                    $number->setMinValue(0, true);
-                    $number->setMaxValue($settings->Flashcards_number_flashcard_max, true);
-                    if ($usePost) {
-                        $number->setValueByArray($this->request->getParsedBody());
-                    } else {
-                        $number->setValue($settings->Flashcards_number_flashcard_current);
-                    }
-                    $activity->addSubItem($number);
-                    break;
-
-                case "ivideo":
-                    $number = new ilNumberInputGUI(
-                        $this->plugin->txt("activities_ivideo_questions"),
-                        "IV_number_question_perset_current"
-                    );
-                    $number->allowDecimals(false);
-                    $number->setMinValue(0, true);
-                    $number->setMaxValue($settings->IV_number_question_perset_max, true);
-                    if ($usePost) {
-                        $number->setValueByArray($this->request->getParsedBody());
-                    } else {
-                        $number->setValue($settings->IV_number_question_perset_current);
-                    }
-                    $activity->addSubItem($number);
-                    break;
-            }
+            $this->addActivitySettings($activity, $availableActivity, $settings, $usePost);
 
             $form->addItem($activity);
         }
@@ -444,5 +227,60 @@ class ilNolejActivitiesFormGUI extends ilNolejFormGUI
         $form->setFormAction($this->ctrl->getFormAction($this));
 
         return $form;
+    }
+
+    /**
+     * Add to the checkbox of an activity the inputs of its settings.
+     * @param ilCheckboxInputGUI $activity the checkbox of the activity
+     * @param string $activityType type of the activity, e.g. "glossary"
+     * @param object $settings settings, as read from the settings file
+     * @param bool $usePost
+     * @return void
+     */
+    protected function addActivitySettings(
+        ilCheckboxInputGUI $activity,
+        string $activityType,
+        $settings,
+        bool $usePost
+    ): void {
+        $activitySettings = self::ACTIVITY_SETTINGS[$activityType] ?? [];
+
+        $ibook = null;
+        if (isset($activitySettings["ibook"])) {
+            $ibook = new ilCheckboxInputGUI(
+                $this->plugin->txt("activities_use_in_ibook"),
+                $activitySettings["ibook"]
+            );
+        }
+
+        $number = null;
+        $numberName = "";
+        if (isset($activitySettings["number"])) {
+            [$prefix, $labelKey, $minValue] = $activitySettings["number"];
+            $numberName = $prefix . "_current";
+            $number = new ilNumberInputGUI($this->plugin->txt($labelKey), $numberName);
+            $number->allowDecimals(false);
+            $number->setMinValue($minValue, true);
+            $number->setMaxValue((float) $settings->{$prefix . "_max"}, true);
+        }
+
+        if ($usePost) {
+            $ibook?->setValueByArray($this->getPostData());
+            $number?->setValueByArray($this->getPostData());
+        }
+        $ibookName = $activitySettings["ibook"] ?? null;
+        if (!$usePost && $ibook !== null && $ibookName !== null) {
+            $ibook->setChecked((bool) $settings->{$ibookName});
+        }
+        if (!$usePost && $number !== null) {
+            $number->setValue((string) $settings->{$numberName});
+        }
+
+        if ($ibook !== null) {
+            $activity->addSubItem($ibook);
+        }
+        if ($number !== null) {
+            $activity->addSubItem($number);
+        }
     }
 }

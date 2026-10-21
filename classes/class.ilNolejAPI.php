@@ -10,6 +10,8 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+declare(strict_types=1);
+
 /**
  * This class provides common methods to interact with Nolej REST API.
  */
@@ -45,7 +47,7 @@ class ilNolejAPI
     public const MAX_SIZE = 524288000;
 
     /** @var ?string */
-    private static $key = null;
+    private static ?string $key = null;
 
     /**
      * API class constructor.
@@ -57,11 +59,11 @@ class ilNolejAPI
 
     /**
      * Get the saved API key.
-     * @return bool
+     * @return string
      */
-    public static function getKey()
+    public static function getKey(): string
     {
-        if (self::$key == null) {
+        if (empty(self::$key)) {
             self::$key = ilNolejPlugin::getConfig("api_key", "");
         }
         return self::$key;
@@ -71,37 +73,22 @@ class ilNolejAPI
      * Check that the API key has been set.
      * @return bool
      */
-    public static function hasKey()
+    public static function hasKey(): bool
     {
         return !empty(self::getKey());
     }
 
     /**
      * @param string $path
-     * @param array $data
+     * @param array<string, mixed> $data
      * @param bool $decode
+     * @return object|string
+     * @phpstan-return ($decode is true ? object|string : string)
+     * @psalm-return ($decode is true ? object|string : string)
      */
-    public function post($path, $data = [], $decode = true)
+    public function post(string $path, array $data = [], bool $decode = true): object|string
     {
-        $data_json = json_encode($data);
-        $url = self::API_URL . $path;
-
-        $client = new GuzzleHttp\Client(["http_errors" => false]);
-        $response = $client->request("POST", $url, [
-            "headers" => [
-                "Authorization" => "X-API-KEY " . self::$key,
-                "User-Agent" => "ILIAS Plugin",
-                "Content-Type" => "application/json"
-            ],
-            "body" => $data_json
-        ]);
-
-        if (!$decode) {
-            return $response->getBody();
-        }
-
-        $object = json_decode($response->getBody());
-        return $object !== null ? $object : $response->getBody();
+        return $this->request("POST", $path, json_encode($data), $decode);
     }
 
     /**
@@ -110,28 +97,13 @@ class ilNolejAPI
      * @param mixed $data
      * @param bool $encode input's data
      * @param bool $decode output
+     * @return object|string
+     * @phpstan-return ($decode is true ? object|string : string)
+     * @psalm-return ($decode is true ? object|string : string)
      */
-    public function put($path, $data = [], $encode = false, $decode = true)
+    public function put(string $path, $data = [], bool $encode = false, bool $decode = true): object|string
     {
-        $data_json = $encode ? json_encode($data) : $data;
-        $url = self::API_URL . $path;
-
-        $client = new GuzzleHttp\Client(["http_errors" => false]);
-        $response = $client->request("PUT", $url, [
-            "headers" => [
-                "Authorization" => "X-API-KEY " . self::$key,
-                "User-Agent" => "ILIAS Plugin",
-                "Content-Type" => "application/json"
-            ],
-            "body" => $data_json
-        ]);
-
-        if (!$decode) {
-            return $response->getBody();
-        }
-
-        $object = json_decode($response->getBody());
-        return $object !== null ? $object : $response->getBody();
+        return $this->request("PUT", $path, $encode ? json_encode($data) : $data, $decode);
     }
 
     /**
@@ -142,31 +114,46 @@ class ilNolejAPI
      *
      * @return object|string return the result given by Nolej. If
      * $decodeOutput is true, treat the result as json object and decode it.
+     * @phpstan-return ($decodeOutput is true ? object|string : string)
+     * @psalm-return ($decodeOutput is true ? object|string : string)
      */
     public function get(
-        $path,
+        string $path,
         $data = "",
-        $encodeInput = false,
-        $decodeOutput = true
-    ) {
-        $url = self::API_URL . $path;
-        $encodedData = $encodeInput ? json_encode($data) : $data;
+        bool $encodeInput = false,
+        bool $decodeOutput = true
+    ): object|string {
+        return $this->request("GET", $path, $encodeInput ? json_encode($data) : $data, $decodeOutput);
+    }
 
+    /**
+     * Send a request to the Nolej API.
+     * @param string $method
+     * @param string $path
+     * @param mixed $body
+     * @param bool $decode
+     * @return object|string the decoded json object, or the raw body if not decoded or not a json.
+     * @phpstan-return ($decode is true ? object|string : string)
+     * @psalm-return ($decode is true ? object|string : string)
+     */
+    protected function request(string $method, string $path, $body, bool $decode): object|string
+    {
         $client = new GuzzleHttp\Client(["http_errors" => false]);
-        $response = $client->request("GET", $url, [
+        $response = $client->request($method, self::API_URL . $path, [
             "headers" => [
                 "Authorization" => "X-API-KEY " . self::$key,
                 "User-Agent" => "ILIAS Plugin",
                 "Content-Type" => "application/json"
             ],
-            "body" => $encodedData
+            "body" => $body
         ]);
 
-        if (!$decodeOutput) {
-            return $response->getBody();
+        $content = (string) $response->getBody();
+        if (!$decode) {
+            return $content;
         }
 
-        $object = json_decode($response->getBody());
-        return $object !== null ? $object : $response->getBody();
+        $object = json_decode($content);
+        return $object !== null ? $object : $content;
     }
 }

@@ -10,6 +10,8 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+declare(strict_types=1);
+
 /**
  * Please do not create instances of large application classes
  * Write small methods within this class to determine the status.
@@ -37,18 +39,7 @@ class ilObjNolejAccess extends ilObjectPluginAccess
         int $a_obj_id,
         ?int $a_user_id = null
     ): bool {
-        global $DIC;
-
-        if ($a_ref_id === null) {
-            $a_ref_id = (int) filter_input(INPUT_GET, "ref_id");
-        }
-
-        if ($a_obj_id === null) {
-            $ilObjDataCache = $DIC["ilObjDataCache"];
-            $a_obj_id = (int) $ilObjDataCache->lookupObjId($a_ref_id);
-        }
-
-        if ($a_user_id == null) {
+        if ($a_user_id === null) {
             $a_user_id = $this->user->getId();
         }
 
@@ -84,24 +75,24 @@ class ilObjNolejAccess extends ilObjectPluginAccess
      */
     public static function _isOffline(int $a_obj_id): bool
     {
-        global $ilDB;
+        global $DIC;
+        $db = $DIC->database();
 
-        $set = $ilDB->queryF(
-            "SELECT is_online FROM " . ilNolejPlugin::TABLE_DATA . " WHERE id = %s;",
+        $set = $db->queryF(
+            "SELECT is_online FROM " . ilNolejPlugin::TABLE_DATA . " WHERE id = %s",
             ["integer"],
             [$a_obj_id]
         );
-        $rec = $ilDB->fetchAssoc($set);
-        return !((bool) $rec["is_online"]);
+        $rec = $db->fetchAssoc($set);
+        return !(is_array($rec) && (bool) $rec["is_online"]);
     }
 
     /**
      * Returns an array with valid operators for the specific object type
-     * @return array
+     * @return string[]
      */
     public static function getConditionOperators(): array
     {
-        include_once "./Services/Conditions/classes/class.ilConditionHandler.php";
         return [
             ilConditionHandler::OPERATOR_FAILED,
             ilConditionHandler::OPERATOR_PASSED

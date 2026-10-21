@@ -10,7 +10,8 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-use ILIAS\GlobalScreen\Scope\MainMenu\Collector\Renderer\Hasher;
+declare(strict_types=1);
+
 use ILIAS\UI\Component\Listing\Workflow\Step;
 
 /**
@@ -21,8 +22,6 @@ use ILIAS\UI\Component\Listing\Workflow\Step;
  */
 class ilObjNolejGUI extends ilObjectPluginGUI
 {
-    use Hasher;
-
     /** @var string */
     public const LP_SESSION_ID = "xnlj_lp_session_state";
 
@@ -85,6 +84,20 @@ class ilObjNolejGUI extends ilObjectPluginGUI
     }
 
     /**
+     * Get the current object as a Nolej object.
+     * @throws LogicException if there is no Nolej object (e.g. in creation mode).
+     * @return ilObjNolej
+     */
+    public function getNolejObject(): ilObjNolej
+    {
+        if (!$this->object instanceof ilObjNolej) {
+            throw new LogicException("There is no Nolej object in the current context.");
+        }
+
+        return $this->object;
+    }
+
+    /**
      * Get object type.
      * @return string
      */
@@ -118,7 +131,6 @@ class ilObjNolejGUI extends ilObjectPluginGUI
             default:
                 switch ($cmd) {
                     case self::CMD_PROPERTIES_EDIT:
-                    case self::CMD_PROPERTIES_UPDATE:
                     case self::CMD_PROPERTIES_SAVE:
                     case self::CMD_CONTENT_EDIT:
                         // Needs write permission.
@@ -193,7 +205,7 @@ class ilObjNolejGUI extends ilObjectPluginGUI
     protected function setTabs(): void
     {
         // tab for the "show content" command
-        if ($this->object->hasReadPermission()) {
+        if ($this->getNolejObject()->hasReadPermission()) {
             $this->tabs->addTab(
                 self::TAB_CONTENT,
                 $this->txt("tab_" . self::TAB_CONTENT),
@@ -205,7 +217,7 @@ class ilObjNolejGUI extends ilObjectPluginGUI
         $this->addInfoTab();
 
         // Properties tabs.
-        if ($this->object->hasWritePermission()) {
+        if ($this->getNolejObject()->hasWritePermission()) {
             $this->tabs->addTab(
                 self::TAB_PROPERTIES,
                 $this->txt("tab_" . self::TAB_PROPERTIES),
@@ -271,13 +283,13 @@ class ilObjNolejGUI extends ilObjectPluginGUI
         // Document ID.
         $info->addProperty(
             $this->plugin->txt("document_id"),
-            $this->object->getDocumentId()
+            $this->getNolejObject()->getDocumentId()
         );
 
         // Status.
         $info->addProperty(
             $this->lng->txt("status"),
-            $this->object->getDocumentStatusInfo() . $this->lastWebhookCallModal()
+            $this->getNolejObject()->getDocumentStatusInfo() . $this->lastWebhookCallModal()
         );
     }
 
@@ -285,11 +297,11 @@ class ilObjNolejGUI extends ilObjectPluginGUI
      * Get the last webhook call modal button.
      * @return string
      */
-    protected function lastWebhookCallModal()
+    protected function lastWebhookCallModal(): string
     {
         global $DIC;
 
-        if (!ilNolejManagerGUI::isStatusPending($this->object->getDocumentStatus())) {
+        if (!ilNolejManagerGUI::isStatusPending($this->getNolejObject()->getDocumentStatus())) {
             return "";
         }
 
@@ -358,12 +370,12 @@ class ilObjNolejGUI extends ilObjectPluginGUI
      * @param ilPropertyFormGUI $form
      * @return void
      */
-    protected function addValuesToForm(&$form): void
+    protected function addValuesToForm(ilPropertyFormGUI $form): void
     {
         $form->setValuesByArray([
-            self::PROP_TITLE => $this->object->getTitle(),
-            self::PROP_DESCRIPTION => $this->object->getDescription(),
-            self::PROP_ONLINE => $this->object->isOnline(),
+            self::PROP_TITLE => $this->getNolejObject()->getTitle(),
+            self::PROP_DESCRIPTION => $this->getNolejObject()->getDescription(),
+            self::PROP_ONLINE => $this->getNolejObject()->isOnline(),
         ]);
     }
 
@@ -376,8 +388,8 @@ class ilObjNolejGUI extends ilObjectPluginGUI
         $form = $this->initPropertiesForm();
         $form->setValuesByPost();
         if ($form->checkInput()) {
-            $this->fillObject($this->object, $form);
-            $this->object->update();
+            $this->fillObject($this->getNolejObject(), $form);
+            $this->getNolejObject()->update();
             $this->tpl->setOnScreenMessage("success", $this->plugin->txt("update_successful"), true);
             $this->ctrl->redirect($this, self::CMD_PROPERTIES_EDIT);
         }
@@ -395,16 +407,17 @@ class ilObjNolejGUI extends ilObjectPluginGUI
         $db = $DIC->database();
         $workflow = $DIC->ui()->factory()->listing()->workflow();
         $renderer = $DIC->ui()->renderer();
+        $generated = $db->quoteIdentifier("generated");
 
         $result = $db->queryF(
             "SELECT * FROM " . ilNolejPlugin::TABLE_H5P
                 . " WHERE document_id = %s"
-                . " AND `generated` = ("
-                . " SELECT MAX(`generated`) FROM " . ilNolejPlugin::TABLE_H5P
+                . " AND " . $generated . " = ("
+                . " SELECT MAX(" . $generated . ") FROM " . ilNolejPlugin::TABLE_H5P
                 . " WHERE document_id = %s"
-                . ") ORDER BY (type = 'ibook') DESC, type ASC;",
+                . ") ORDER BY CASE WHEN type = 'ibook' THEN 0 ELSE 1 END ASC, type ASC",
             ["text", "text"],
-            [$this->object->getDocumentId(), $this->object->getDocumentId()]
+            [$this->getNolejObject()->getDocumentId(), $this->getNolejObject()->getDocumentId()]
         );
 
         $steps = [];
@@ -429,9 +442,13 @@ class ilObjNolejGUI extends ilObjectPluginGUI
         }
 
         $selector = $workflow->linear($this->txt("tab_activities"), $steps);
-        if (isset($_GET["type"]) && array_key_exists($_GET["type"], $indexes)) {
-            $this->selectedType = $_GET["type"];
-            $selector = $selector->withActive($indexes[$_GET["type"]]);
+        $query = $DIC->http()->wrapper()->query();
+        if ($query->has("type")) {
+            $requestedType = $query->retrieve("type", $DIC->refinery()->kindlyTo()->string());
+            if (array_key_exists($requestedType, $indexes)) {
+                $this->selectedType = $requestedType;
+                $selector = $selector->withActive($indexes[$requestedType]);
+            }
         }
         $this->tpl->setRightContent($renderer->render($selector));
     }
@@ -444,12 +461,12 @@ class ilObjNolejGUI extends ilObjectPluginGUI
     {
         $this->setContentSubTabs();
 
-        if ($this->object->getDocumentStatus() != ilNolejManagerGUI::STATUS_COMPLETED) {
+        if ($this->getNolejObject()->getDocumentStatus() != ilNolejManagerGUI::STATUS_COMPLETED) {
             $this->tpl->setOnScreenMessage("info", $this->plugin->txt("activities_not_yet_generated"));
             return;
         }
 
-        $h5pDir = $this->object->getDataDir() . "/h5p";
+        $h5pDir = $this->getNolejObject()->getDataDir() . "/h5p";
         if (!is_dir($h5pDir)) {
             $this->tpl->setOnScreenMessage("failure", $this->plugin->txt("activities_not_downloaded"));
             return;
@@ -461,7 +478,7 @@ class ilObjNolejGUI extends ilObjectPluginGUI
             return;
         }
 
-        $contentId = $this->object->getContentIdOfType($this->selectedType);
+        $contentId = $this->getNolejObject()->getContentIdOfType($this->selectedType);
 
         // Display activity.
         $editable = $this->checkPermissionBool("write");
@@ -480,35 +497,34 @@ class ilObjNolejGUI extends ilObjectPluginGUI
     /**
      * Get the HTML of an H5P activity.
      * @deprecated
-     * @param int $contentId
+     * @param int|string $contentId
      * @return string html
      */
-    public static function getH5PHtml($contentId): string
+    public static function getH5PHtml(int|string $contentId): string
     {
         return ilNolejPlugin::renderH5P($contentId);
     }
 
     /**
-     * @param $object ilObjNolej
-     * @param $form ilPropertyFormGUI
+     * @param ilObjNolej $object
+     * @param ilPropertyFormGUI $form
+     * @return void
      */
-    private function fillObject($object, $form)
+    private function fillObject(ilObjNolej $object, ilPropertyFormGUI $form): void
     {
-        $object->setTitle($form->getInput(self::PROP_TITLE));
-        $object->setDescription($form->getInput(self::PROP_DESCRIPTION));
-        $object->setOnline($form->getInput(self::PROP_ONLINE));
+        $object->setTitle((string) $form->getInput(self::PROP_TITLE));
+        $object->setDescription((string) $form->getInput(self::PROP_DESCRIPTION));
+        $object->setOnline((bool) $form->getInput(self::PROP_ONLINE));
     }
 
     /**
      * Goto redirection.
-     * @param array $a_target
+     * @param string[] $a_target
      * @return void
      */
     public static function _goto(array $a_target): void
     {
         $target = $a_target[0];
-
-        include_once ilNolejPlugin::PLUGIN_DIR . "/classes/class.ilNolejWebhook.php";
 
         if ($target == "webhook") {
             $webhook = new ilNolejWebhook();

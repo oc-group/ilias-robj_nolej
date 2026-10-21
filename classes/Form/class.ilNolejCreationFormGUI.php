@@ -10,6 +10,8 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+declare(strict_types=1);
+
 /**
  * Creation Form GUI class.
  *
@@ -139,7 +141,7 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
             return;
         }
 
-        $title = $form->getInput(self::PROP_TITLE);
+        $title = (string) $form->getInput(self::PROP_TITLE);
         $decrementedCredit = 1;
 
         // Set url (signed) and format based on source type.
@@ -174,7 +176,8 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
 
             case self::PROP_FILE:
                 // Save uploaded file as a media object.
-                if (!isset($_FILES[self::PROP_INPUT_FILE], $_FILES[self::PROP_INPUT_FILE]["tmp_name"])) {
+                $file = $form->getInput(self::PROP_INPUT_FILE);
+                if (!isset($file["tmp_name"])) {
                     // File not set.
                     $this->tpl->setOnScreenMessage("failure", $this->plugin->txt("err_file_upload"));
                     $form->setValuesByPost();
@@ -182,33 +185,26 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
                     return;
                 }
 
-                $mob = $this->saveMob();
-                if ($mob == null) {
-                    $this->tpl->setOnScreenMessage("failure", $this->plugin->txt("err_file_upload"));
-                    $form->setValuesByPost();
-                    $this->tpl->setContent($form->getHTML());
-                    return;
-                }
-
+                $mob = $this->saveMob(null, $file);
                 $format = $this->getMobFormat($mob->getId());
                 $url = $this->getSignedUrl($mob->getId(), ilWACSignedPath::MAX_LIFETIME);
                 break;
 
             case self::PROP_TEXT:
                 // Save text as media object.
-                $content = $form->getInput(self::PROP_TEXTAREA);
+                $content = (string) $form->getInput(self::PROP_TEXTAREA);
                 $mob = $this->saveMob($content);
                 $format = "freetext";
                 $url = $this->getSignedUrl($mob->getId(), ilWACSignedPath::MAX_LIFETIME);
                 break;
         }
 
-        $language = $form->getInput(self::PROP_LANG);
+        $language = (string) $form->getInput(self::PROP_LANG);
 
         // Update object title if it differs from the current one.
-        if (!empty($title) && $title != $this->obj_gui->getObject()->getTitle()) {
-            $this->obj_gui->getObject()->setTitle($title);
-            $this->obj_gui->getObject()->update();
+        if (!empty($title) && $title != $this->obj_gui->getNolejObject()->getTitle()) {
+            $this->obj_gui->getNolejObject()->setTitle($title);
+            $this->obj_gui->getNolejObject()->update();
         }
 
         // Call Nolej creation API.
@@ -252,16 +248,16 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
             $form->setCloseTag(false);
 
             $title = new ilNonEditableValueGUI($this->plugin->txt("prop_" . self::PROP_TITLE), self::PROP_TITLE);
-            $title->setValue($this->obj_gui->getObject()->getTitle());
+            $title->setValue($this->obj_gui->getNolejObject()->getTitle());
             $form->addItem($title);
 
             $mediaSource = new ilNonEditableValueGUI($this->plugin->txt("prop_" . self::PROP_MEDIA_SRC), self::PROP_MEDIA_SRC);
-            $mediaSource->setValue($this->obj_gui->getObject()->getDocumentSource());
-            $mediaSource->setInfo($this->plugin->txt("prop_" . $this->obj_gui->getObject()->getDocumentMediaType()));
+            $mediaSource->setValue($this->obj_gui->getNolejObject()->getDocumentSource());
+            $mediaSource->setInfo($this->plugin->txt("prop_" . $this->obj_gui->getNolejObject()->getDocumentMediaType()));
             $form->addItem($mediaSource);
 
             $language = new ilNonEditableValueGUI($this->plugin->txt("prop_" . self::PROP_LANG), self::PROP_LANG);
-            $language->setValue($this->lng->txt("meta_l_" . $this->obj_gui->getObject()->getDocumentLang()));
+            $language->setValue($this->lng->txt("meta_l_" . $this->obj_gui->getNolejObject()->getDocumentLang()));
             $form->addItem($language);
 
             return $form;
@@ -270,7 +266,7 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
         // Module title. Defaults to Object title, it can be changed.
         $title = new ilTextInputGUI($this->plugin->txt("prop_" . self::PROP_TITLE), self::PROP_TITLE);
         $title->setInfo($this->plugin->txt("prop_" . self::PROP_TITLE . "_info"));
-        $title->setValue($this->obj_gui->getObject()->getTitle());
+        $title->setValue($this->obj_gui->getNolejObject()->getTitle());
         $title->setMaxLength(250);
         $form->addItem($title);
 
@@ -291,7 +287,7 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
         $language->setOptions(
             array_combine(
                 ilNolejAPI::LANG_SUPPORTED,
-                array_map(fn($lang) => $this->lng->txt("meta_l_{$lang}"), ilNolejAPI::LANG_SUPPORTED)
+                array_map(fn ($lang) => $this->lng->txt("meta_l_{$lang}"), ilNolejAPI::LANG_SUPPORTED)
             )
         );
         $language->setRequired(true);
@@ -306,9 +302,9 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
     /**
      * Set possible sources to analyze.
      * @param ilRadioGroupInputGUI $mediaSource
-     * @return null
+     * @return void
      */
-    protected function setSources($mediaSource): void
+    protected function setSources(ilRadioGroupInputGUI $mediaSource): void
     {
         // Source: web (content or streaming audio/video.
         $mediaWeb = new ilRadioOption($this->plugin->txt("prop_" . self::PROP_WEB), self::PROP_WEB);
@@ -364,29 +360,25 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
 
         $mobSelector = $this->factory->item()->standard($selectorButton);
 
-        if (isset($_GET["mob_id"]) && $this->isValidMobId((int) $_GET["mob_id"])) {
-            $mobId = (int) $_GET["mob_id"];
+        $mobId = $this->getRequestedMobId();
+        if ($mobId > 0) {
             $path = ilObjMediaObject::_lookupItemPath($mobId);
             $title = ilObject::_lookupTitle($mobId);
 
+            // Add media preview.
+            $preview = $this->mediaPreview($path);
+            if ($preview !== "") {
+                $mobSelector = $mobSelector->withLeadText($preview);
+            }
+
             $mobSelector = $mobSelector->withDescription($title)
                 ->withProperties([
-                    $this->lng->txt("id") => $mobId,
+                    $this->lng->txt("id") => (string) $mobId,
                     $this->lng->txt("mob") => $title,
                 ]);
 
-            // Add media preview.
-            $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-            if (in_array($extension, ilNolejAPI::TYPE_AUDIO)) {
-                $audio = $this->factory->player()->audio($path);
-                $mobSelector = $mobSelector->withLeadText($this->renderer->render($audio));
-            } elseif (in_array($extension, ilNolejAPI::TYPE_VIDEO)) {
-                $video = $this->factory->player()->video($path);
-                $mobSelector = $mobSelector->withLeadText($this->renderer->render($video));
-            }
-
             $mediaSource->setValue(self::PROP_MOB);
-            $mobIdInput->setValue($mobId);
+            $mobIdInput->setValue((string) $mobId);
         }
         $mob->setInfo($this->renderer->render([$mobSelector, $selectorModal]));
         $mediaMob->addSubItem($mob);
@@ -426,6 +418,37 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
     }
 
     /**
+     * Get the media object selected via the media pool selector (mob_id in the query).
+     * @return int the id of the media object, 0 if there is none or it is not valid.
+     */
+    protected function getRequestedMobId(): int
+    {
+        if (!$this->query->has("mob_id")) {
+            return 0;
+        }
+
+        $mobId = $this->query->retrieve("mob_id", $this->refinery->kindlyTo()->int());
+        return $this->isValidMobId($mobId) ? $mobId : 0;
+    }
+
+    /**
+     * Render the audio or video player of a media file.
+     * @param string $path of the media file
+     * @return string html, empty if the file is neither an audio nor a video.
+     */
+    protected function mediaPreview(string $path): string
+    {
+        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        if (in_array($extension, ilNolejAPI::TYPE_AUDIO)) {
+            return $this->renderer->render($this->factory->player()->audio($path));
+        }
+        if (in_array($extension, ilNolejAPI::TYPE_VIDEO)) {
+            return $this->renderer->render($this->factory->player()->video($path));
+        }
+        return "";
+    }
+
+    /**
      * Get the content limits popover.
      * @return string
      */
@@ -451,7 +474,7 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
                         ]),
                     $this->factory->item()->standard($this->plugin->txt("limit_doc"))
                         ->withProperties([
-                            $this->plugin->txt("limit_max_pages") => 50,
+                            $this->plugin->txt("limit_max_pages") => "50",
                             $this->plugin->txt("limit_min_characters") => "500",
                             $this->plugin->txt("limit_max_size") => "500 MB",
                             $this->plugin->txt("limit_type") => implode(", ", ilNolejAPI::TYPE_DOC),
@@ -470,7 +493,7 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
      * Get the MediaPool selector tree GUI.
      * @return ilPoolSelectorGUI
      */
-    protected function getPoolSelectorGUI()
+    protected function getPoolSelectorGUI(): ilPoolSelectorGUI
     {
         $tree = new ilPoolSelectorGUI($this, self::CMD_SHOW, $this, self::CMD_MEDIA_SELECTOR);
         $tree->setTypeWhiteList(["root", "cat", "grp", "fold", "crs", "mep"]);
@@ -483,7 +506,7 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
      * @param int $mobId
      * @return bool
      */
-    protected function isValidMobId($mobId)
+    protected function isValidMobId(int $mobId): bool
     {
         if ($mobId <= 0) {
             return false;
@@ -503,19 +526,21 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
      * @param string $filter
      * @return void
      */
-    public function showMediaSelector($filter = "")
+    public function showMediaSelector(string $filter = ""): void
     {
         global $DIC;
 
         // Check SESSION data and user permissions.
+        $poolRefId = $this->query->has("pool_ref_id")
+            ? $this->query->retrieve("pool_ref_id", $this->refinery->kindlyTo()->int())
+            : 0;
         if (
-            empty($_GET["pool_ref_id"]) ||
-            !$DIC->access()->checkAccess("read", "", $_GET["pool_ref_id"]) ||
-            ilObject::_lookupType(ilObject::_lookupObjId($_GET["pool_ref_id"])) != "mep"
+            $poolRefId <= 0 ||
+            !$DIC->access()->checkAccess("read", "", $poolRefId) ||
+            ilObject::_lookupType(ilObject::_lookupObjId($poolRefId)) != "mep"
         ) {
             // Cannot access this mediapool. Return to configuration.
             $this->ctrl->redirect($this, self::CMD_SHOW);
-            return;
         }
 
         $this->ctrl->saveParameter($this, ["pool_ref_id"]);
@@ -526,8 +551,9 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
         $this->lng->loadLanguageModule("content");
 
         $pool_view = "folder";
-        if (isset($_GET["pool_view"]) && in_array($_GET["pool_view"], ["folder", "all"])) {
-            $pool_view = $_GET["pool_view"];
+        if ($this->query->has("pool_view")) {
+            $requestedView = $this->query->retrieve("pool_view", $this->refinery->kindlyTo()->string());
+            $pool_view = in_array($requestedView, ["folder", "all"]) ? $requestedView : "folder";
         }
 
         // Override back target.
@@ -551,7 +577,7 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
 
         $toolbar->addComponent($view_control);
 
-        $pool = new ilObjMediaPool($_GET["pool_ref_id"]);
+        $pool = new ilObjMediaPool($poolRefId);
         $tmode = ilMediaPoolTableGUI::IL_MEP_SELECT;
 
         // Handle table sub commands and get the table.
@@ -608,7 +634,7 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
      * @param ilMediaPoolTableGUI $mpool_table
      * @return void
      */
-    protected function filterValidMediaObjects($mpool_table)
+    protected function filterValidMediaObjects(ilMediaPoolTableGUI $mpool_table): void
     {
         $mediaObjects = $mpool_table->getData();
         $validMediaObjects = [];
@@ -626,7 +652,7 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
             }
 
             // Media item path.
-            $mediaItemId = $mediaObject["foreign_id"];
+            $mediaItemId = (int) $mediaObject["foreign_id"];
             if ($this->isValidMobId($mediaItemId)) {
                 $validMediaObjects[] = $mediaObject;
             }
@@ -640,29 +666,31 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
      * Confirm the selected source.
      * @return void
      */
-    public function selectMedia()
+    public function selectMedia(): void
     {
         // Check POST data.
-        if (!isset($_POST["id"]) || !is_array($_POST["id"]) || empty($_POST["id"])) {
+        $ids = $this->post->has("id")
+            ? $this->post->retrieve("id", $this->refinery->kindlyTo()->listOf($this->refinery->kindlyTo()->int()))
+            : [];
+        if (empty($ids)) {
             $this->tpl->setOnScreenMessage("failure", $this->lng->txt("file_not_valid"), true);
             $this->ctrl->redirect($this, self::CMD_SHOW);
-            return;
         }
 
         // Item id relative to the mediapool. The table allows multiple media to be selected,
         // but only one can be set as the tile image.
-        $mediapoolItemId = $_POST["id"][0];
+        $mediapoolItemId = $ids[0];
 
         // Media item id.
         $mobId = ilMediaPoolItem::lookupForeignId($mediapoolItemId);
 
         // Check mob id validity.
-        if ($this->isValidMobId($mobId)) {
-            $this->ctrl->setParameter($this, "mob_id", $mobId);
-        } else {
+        if (!$this->isValidMobId($mobId)) {
             $this->tpl->setOnScreenMessage("failure", $this->lng->txt("file_not_valid"), true);
+            $this->ctrl->redirect($this, self::CMD_SHOW);
         }
 
+        $this->ctrl->setParameter($this, "mob_id", $mobId);
         $this->ctrl->redirect($this, self::CMD_SHOW);
     }
 
@@ -688,12 +716,13 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
     /**
      * Save uploaded media item.
      * @param ?string $content (null for uploaded file)
+     * @param ?array<string, mixed> $file the uploaded file, as given by the file input
      * @return ilObjMediaObject
      */
-    protected function saveMob($content = null)
+    protected function saveMob(?string $content = null, ?array $file = null): ilObjMediaObject
     {
-        $filename = $content == null
-            ? ilObjMediaObject::fixFilename($_FILES[self::PROP_INPUT_FILE]["name"])
+        $filename = $content === null
+            ? ilObjMediaObject::fixFilename((string) ($file["name"] ?? ""))
             : "freetext.htm";
 
         // Create media object.
@@ -712,13 +741,14 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
 
         // Save file to its path.
         $path = "{$mob_dir}/{$filename}";
-        if ($content == null) {
+        if ($content === null) {
             ilFileUtils::moveUploadedFile(
-                $_FILES[self::PROP_INPUT_FILE]["tmp_name"],
+                (string) ($file["tmp_name"] ?? ""),
                 $filename,
                 $path
             );
-        } else {
+        }
+        if ($content !== null) {
             file_put_contents($path, $content);
         }
 
@@ -766,12 +796,12 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
      * @return string error message, empty on success.
      */
     public function runCreation(
-        $title,
-        $language,
-        $url,
-        $format,
-        $decrementedCredit = 1,
-        $automaticMode = false
+        string $title,
+        string $language,
+        string $url,
+        string $format,
+        int $decrementedCredit = 1,
+        bool $automaticMode = false
     ): string {
         global $DIC;
 
@@ -808,9 +838,9 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
         // Check for creation errors.
         if (!is_object($result) || !property_exists($result, "id") || !is_string($result->id)) {
             // An error occurred.
-            $message = property_exists($result, "Error")
+            $message = is_object($result) && property_exists($result, "Error")
                 ? $result->Error
-                : "<pre>" . print_r($result, true) . "</pre>";
+                : "<pre>" . (string) json_encode($result) . "</pre>";
             return sprintf($this->plugin->txt("err_doc_response"), $message);
         }
 
@@ -820,14 +850,14 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
                 "document_id" => ["text", $result->id],
             ],
             [
-                "id" => ["integer", $this->obj_gui->getObject()->getId()],
+                "id" => ["integer", $this->obj_gui->getNolejObject()->getId()],
             ]
         );
 
         $this->db->insert(
             ilNolejPlugin::TABLE_DOC,
             [
-                "title" => ["text", $this->obj_gui->getObject()->getTitle()],
+                "title" => ["text", $this->obj_gui->getNolejObject()->getTitle()],
                 "status" => ["integer", ilNolejManagerGUI::STATUS_CREATION_PENDING],
                 "consumed_credit" => ["integer", $decrementedCredit],
                 "doc_url" => ["blob", $url],

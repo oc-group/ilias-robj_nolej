@@ -1,4 +1,4 @@
-﻿action_activities#:#Aktivitätsgenerierung läuft
+action_activities#:#Aktivitätsgenerierung läuft
 action_activities_ko#:#Aktivitätsgenerierung fehlgeschlagen
 action_activities_ko_desc#:#Leider ist die Aktivitätsgenerierung des Dokuments „%s“ am %s fehlgeschlagen. Fehlermeldungen
 action_activities_ok#:#Aktivitäten generiert
@@ -99,6 +99,8 @@ err_doc_response#:#Bei der Erstellung des NOLEJ-Moduls ist ein Fehler aufgetrete
 err_file_upload#:#Fehler beim Hochladen der Datei. Bitte wenden Sie sich an einen Administrator.
 err_ftb_missing_blank#:#Missing 4 underscores for Fill the blanks activity.
 err_h5p_content#:#Leider kann diese Aktivität nicht geladen werden. Bitte wenden Sie sich an einen Administrator.
+err_h5p_not_active#:#Das H5P-Plugin ist nicht aktiv. Bitte wenden Sie sich an einen Administrator.
+err_h5p_not_installed#:#Das H5P-Plugin ist nicht installiert. Bitte wenden Sie sich an einen Administrator.
 err_h5p_package#:#kein gültiges H5P-Paket
 err_h5p_plugin#:#Leider wird Ihre Version des H5P-Plugins nicht unterstützt. Bitte aktualisieren Sie es oder wenden Sie sich an einen Administrator.
 err_json_decode#:#JSON kann nicht dekodiert werden

@@ -10,6 +10,8 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+declare(strict_types=1);
+
 /**
  * Transcription Form GUI class.
  *
@@ -67,15 +69,15 @@ class ilNolejTranscriptionFormGUI extends ilNolejFormGUI
         }
 
         // May update title.
-        $title = $form->getInput(self::PROP_TITLE);
-        $objTitle = $this->obj_gui->getObject()->getTitle();
+        $title = (string) $form->getInput(self::PROP_TITLE);
+        $objTitle = $this->obj_gui->getNolejObject()->getTitle();
         if ($title != "" && $title != $objTitle) {
-            $this->obj_gui->getObject()->setTitle($title);
-            $this->obj_gui->getObject()->update();
+            $this->obj_gui->getNolejObject()->setTitle($title);
+            $this->obj_gui->getNolejObject()->update();
         }
 
         // Update transcription.
-        $transcription = $form->getInput(self::PROP_TRANSCRIPTION);
+        $transcription = (string) $form->getInput(self::PROP_TRANSCRIPTION);
 
         // Start analysis.
         $errorMessage = $this->runAnalysis($title, $transcription, false);
@@ -107,14 +109,14 @@ class ilNolejTranscriptionFormGUI extends ilNolejFormGUI
         $form = new ilPropertyFormGUI();
 
         // Object title.
-        $objTitle = $this->obj_gui->getObject()->getTitle();
+        $objTitle = $this->obj_gui->getNolejObject()->getTitle();
 
         // Module transcription.
         $content = $this->manager->readDocumentFile("transcription.htm");
 
         if ($this->status != ilNolejManagerGUI::STATUS_ANALYSIS) {
             $form->setTitle($objTitle);
-            $form->setDescription($content ? $content : "---");
+            $form->setDescription($content ?: "---");
             return $form;
         }
 
@@ -122,20 +124,12 @@ class ilNolejTranscriptionFormGUI extends ilNolejFormGUI
         $form->setShowTopButtons(false);
 
         // Document title.
-        $title = $this->obj_gui->getObject()->getDocumentTitle();
-        if ($title != "" && $title != $objTitle) {
-            $titleInput = new ilTextInputGUI(
-                $this->plugin->txt("prop_" . self::PROP_TITLE),
-                self::PROP_TITLE
-            );
-            $titleInput->setValue($title);
-        } else {
-            $titleInput = new ilNonEditableValueGUI(
-                $this->plugin->txt("prop_" . self::PROP_TITLE),
-                self::PROP_TITLE
-            );
-            $titleInput->setValue($objTitle);
-        }
+        $title = $this->obj_gui->getNolejObject()->getDocumentTitle();
+        $isTitleEditable = $title != "" && $title != $objTitle;
+        $titleInput = $isTitleEditable
+            ? new ilTextInputGUI($this->plugin->txt("prop_" . self::PROP_TITLE), self::PROP_TITLE)
+            : new ilNonEditableValueGUI($this->plugin->txt("prop_" . self::PROP_TITLE), self::PROP_TITLE);
+        $titleInput->setValue($isTitleEditable ? $title : $objTitle);
         $form->addItem($titleInput);
 
         // Transcription.
@@ -151,7 +145,7 @@ class ilNolejTranscriptionFormGUI extends ilNolejFormGUI
             $txt->setRTERootBlockElement("");
             $txt->disableButtons(["charmap", "anchor"]);
         }
-        $txt->setValue($content);
+        $txt->setValue((string) $content);
         $form->addItem($txt);
 
         $form->addCommandButton(self::CMD_SAVE, $this->lng->txt("save"));
@@ -164,7 +158,7 @@ class ilNolejTranscriptionFormGUI extends ilNolejFormGUI
      * Download the transctiption of the analyzed media.
      * @return ?string error message
      */
-    public function downloadTranscription()
+    public function downloadTranscription(): ?string
     {
         if ($this->status < ilNolejManagerGUI::STATUS_ANALYSIS) {
             // Transcription is not ready!
@@ -173,7 +167,7 @@ class ilNolejTranscriptionFormGUI extends ilNolejFormGUI
 
         if ($this->manager->hasDocumentFile("transcription.htm")) {
             // Transcription already downloaded.
-            return;
+            return null;
         }
 
         $api = new ilNolejAPI();
@@ -186,23 +180,25 @@ class ilNolejTranscriptionFormGUI extends ilNolejFormGUI
             !property_exists($result, "result") ||
             !is_string($result->result)
         ) {
-            return $this->plugin->txt("err_transcription_get") . print_r($result);
+            return $this->plugin->txt("err_transcription_get") . (string) json_encode($result);
         }
 
         $title = $result->title;
         $this->db->manipulateF(
-            "UPDATE " . ilNolejPlugin::TABLE_DOC . " SET title = %s WHERE document_id = %s;",
+            "UPDATE " . ilNolejPlugin::TABLE_DOC . " SET title = %s WHERE document_id = %s",
             ["text", "text"],
             [$title, $this->documentId]
         );
 
         $success = $this->manager->writeDocumentFile(
             "transcription.htm",
-            file_get_contents($result->result)
+            (string) file_get_contents($result->result)
         );
         if (!$success) {
-            return $this->plugin->txt("err_transcription_download") . print_r($result, true);
+            return $this->plugin->txt("err_transcription_download") . (string) json_encode($result);
         }
+
+        return null;
     }
 
     /**
@@ -212,45 +208,19 @@ class ilNolejTranscriptionFormGUI extends ilNolejFormGUI
      * @param bool $automaticMode
      * @return string $errorMessage empty on success
      */
-    public function runAnalysis($title, $transcription = null, $automaticMode = false): string
+    public function runAnalysis(string $title, ?string $transcription = null, bool $automaticMode = false): string
     {
         global $DIC;
 
-        $api = new ilNolejAPI();
-
-        // Check transcription.
-        if ($transcription == null) {
-            // Start analysis with no changes in the transcription.
-            $this->plugin->log("Requesting analysis with unmodified transcription for document: {$this->documentId}");
-            $result = $api->put(
-                "/documents/{$this->documentId}/transcription",
-                [],
-                true,
-                true
-            );
-        } elseif (empty($transcription) || empty($title)) {
+        $hasTranscription = $transcription !== null && $transcription !== "";
+        if ($hasTranscription && $title === "") {
             // Error: transcription and title cannot be empty.
             return $this->plugin->txt("err_transcription_missing");
-        } else {
-            // Update transcription file.
-            $this->manager->writeDocumentFile("transcription.htm", $transcription);
-
-            // Generate transcription url webhook.
-            $url = ILIAS_HTTP_PATH . substr(ilWACSignedPath::signFile($this->manager->dataDir . "/transcription.htm"), 1);
-
-            $this->plugin->log("Requesting analysis for document: {$this->documentId}");
-
-            // Call Nolej analysis API.
-            $result = $api->put(
-                "/documents/{$this->documentId}/transcription",
-                [
-                    "s3URL" => $url,
-                    "automaticMode" => $automaticMode,
-                ],
-                true,
-                true
-            );
         }
+
+        $result = $hasTranscription
+            ? $this->putTranscription((string) $transcription, $automaticMode)
+            : $this->putUnmodifiedTranscription();
 
         if (
             !is_object($result) ||
@@ -261,7 +231,7 @@ class ilNolejTranscriptionFormGUI extends ilNolejFormGUI
                 $result->result == "ok"
             )
         ) {
-            return "An error occurred: " . print_r($result, true);
+            return "An error occurred: " . (string) json_encode($result);
         }
 
         $this->manager->updateDocumentStatus(ilNolejManagerGUI::STATUS_ANALYSIS_PENDING);
@@ -274,5 +244,51 @@ class ilNolejTranscriptionFormGUI extends ilNolejFormGUI
             ->store();
 
         return "";
+    }
+
+    /**
+     * Start the analysis with no changes in the transcription.
+     * @return object|string the response of Nolej
+     */
+    protected function putUnmodifiedTranscription(): object|string
+    {
+        $this->plugin->log("Requesting analysis with unmodified transcription for document: {$this->documentId}");
+
+        $api = new ilNolejAPI();
+        return $api->put(
+            "/documents/{$this->documentId}/transcription",
+            [],
+            true,
+            true
+        );
+    }
+
+    /**
+     * Update the transcription and start the analysis.
+     * @param string $transcription
+     * @param bool $automaticMode
+     * @return object|string the response of Nolej
+     */
+    protected function putTranscription(string $transcription, bool $automaticMode): object|string
+    {
+        // Update transcription file.
+        $this->manager->writeDocumentFile("transcription.htm", $transcription);
+
+        // Generate transcription url webhook.
+        $url = ILIAS_HTTP_PATH . substr(ilWACSignedPath::signFile($this->manager->dataDir . "/transcription.htm"), 1);
+
+        $this->plugin->log("Requesting analysis for document: {$this->documentId}");
+
+        // Call Nolej analysis API.
+        $api = new ilNolejAPI();
+        return $api->put(
+            "/documents/{$this->documentId}/transcription",
+            [
+                "s3URL" => $url,
+                "automaticMode" => $automaticMode,
+            ],
+            true,
+            true
+        );
     }
 }
