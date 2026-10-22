@@ -32,8 +32,8 @@ class ilNolejWebhook
     }
 
     /**
-     * Parse the request from POST content if $data is null.
-     * @param mixed $data the decoded request, or null to read it from the POST content
+     * Parse the request from POST content if
+     * @param mixed $data is not null
      * @return void
      */
     public function parse($data = null): void
@@ -77,6 +77,7 @@ class ilNolejWebhook
                 $this->plugin->log("Received work in progress.");
                 if (!$DIC->user()->isAnonymous()) {
                     $DIC->ui()->mainTemplate()->setOnScreenMessage("info", $this->plugin->txt("work_in_progress"));
+                    return;
                 }
                 break;
 
@@ -92,8 +93,8 @@ class ilNolejWebhook
      * @return bool false if the request is not served by the webhook endpoint (no exit).
      */
     protected function exitWithMessage(
-        int $code = 400,
-        string $message = ""
+        $code = 400,
+        $message = ""
     ): bool {
         if ($this->shouldExit) {
             // The status code must be set before any output: afterwards PHP raises a
@@ -179,8 +180,8 @@ class ilNolejWebhook
 
         $document = $db->fetchAssoc($result);
 
-        $now = time();
-        $this->setUserLang((int) $document["user_id"]);
+        $now = strtotime("now");
+        $this->setUserLang($document["user_id"]);
         $manager = ilNolejManagerGUI::getInstanceByDocumentId($documentId);
 
         if (
@@ -319,8 +320,8 @@ class ilNolejWebhook
 
         $document = $db->fetchAssoc($result);
 
-        $now = time();
-        $this->setUserLang((int) $document["user_id"]);
+        $now = strtotime("now");
+        $this->setUserLang($document["user_id"]);
         $manager = ilNolejManagerGUI::getInstanceByDocumentId($documentId);
 
         if (
@@ -421,8 +422,8 @@ class ilNolejWebhook
         }
 
         $document = $db->fetchAssoc($result);
-        $now = time();
-        $this->setUserLang((int) $document["user_id"]);
+        $now = strtotime("now");
+        $this->setUserLang($document["user_id"]);
         $manager = ilNolejManagerGUI::getInstanceByDocumentId($documentId);
 
         $db->manipulateF(
@@ -508,15 +509,15 @@ class ilNolejWebhook
      * @param string[] $vars parameters to use in $bodyVar's sprintf
      */
     public function sendNotification(
-        string $documentId,
-        int $userId,
-        string $action,
-        string $status,
-        int $code,
-        string $errorMessage,
-        int $credits,
-        string $bodyVar,
-        array $vars = []
+        $documentId,
+        $userId,
+        $action,
+        $status,
+        $code,
+        $errorMessage,
+        $credits,
+        $bodyVar,
+        $vars = []
     ): void {
         /** Send Notification */
         $ass = new ilNolejActivity($documentId, $userId, $action);
@@ -557,9 +558,9 @@ class ilNolejWebhook
      * @param int $a_user_id
      * @return ilLanguage
      */
-    protected function setUserLang(int $a_user_id): ilLanguage
+    protected function setUserLang($a_user_id): ilLanguage
     {
-        $lang = ilObjUser::_lookupLanguage($a_user_id);
+        $lang = ilObjUser::_lookupLanguage((int) $a_user_id);
         $lng = new ilLanguage($lang);
         $lng->loadLanguageModule(ilNolejPlugin::PREFIX);
         ilDatePresentation::setUseRelativeDates(false);

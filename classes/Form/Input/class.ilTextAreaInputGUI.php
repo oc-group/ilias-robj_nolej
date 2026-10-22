@@ -42,7 +42,7 @@ class ilTextAreaInputGUI extends \ilTextAreaInputGUI
      * @param string $errorMessage
      * @return void
      */
-    public function addRegex(string $pattern, string $errorMessage): void
+    public function addRegex($pattern, $errorMessage): void
     {
         $this->regex[] = [
             "pattern" => $pattern,

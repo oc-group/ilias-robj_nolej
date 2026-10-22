@@ -62,13 +62,16 @@ class ilNolejNotificationProvider extends AbstractNotificationPluginProvider
         $group = $factory->standardGroup($id("nolej_bucket_group"))
             ->withTitle($plugin->txt("plugin_title"));
 
-        foreach ($new_activities as $i => $activity) {
+        for ($i = 0, $len = count($new_activities); $i < $len; $i++) {
+            $activity = $new_activities[$i];
+
             $action = $activity->getAction() ?? "";
             $documentTitle = $activity->lookupDocumentTitle() ?? "nf-{$action}";
             $link = ILIAS_HTTP_PATH . "/goto.php?target=xnlj_" . (string) $activity->lookupRefId();
             $title = $ui->factory()->link()->standard($documentTitle, $link);
             $description = $plugin->txt("action_{$action}");
 
+            // $title = $ui->renderer()->render($titleObj);
             $ts = new ilDateTime($activity->getTimestamp(), IL_CAL_UNIX);
 
             $nolej_notification_item = $ui->factory()

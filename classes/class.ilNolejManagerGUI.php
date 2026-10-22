@@ -86,12 +86,6 @@ class ilNolejManagerGUI
     /** @var ilNolejPlugin */
     protected ilNolejPlugin $plugin;
 
-    /** @var \ILIAS\HTTP\Wrapper\RequestWrapper */
-    protected \ILIAS\HTTP\Wrapper\RequestWrapper $query;
-
-    /** @var \ILIAS\Refinery\Factory */
-    protected \ILIAS\Refinery\Factory $refinery;
-
     /** @var string */
     protected string $defaultClass = "";
 
@@ -107,7 +101,7 @@ class ilNolejManagerGUI
     /**
      * @param ilObjNolejGUI $obj_gui
      */
-    public function __construct(ilObjNolejGUI $obj_gui)
+    public function __construct($obj_gui)
     {
         global $DIC;
         $this->ctrl = $DIC->ctrl();
@@ -115,8 +109,6 @@ class ilNolejManagerGUI
         $this->db = $DIC->database();
         $this->lng = $DIC->language();
         $this->tpl = $DIC->ui()->mainTemplate();
-        $this->query = $DIC->http()->wrapper()->query();
-        $this->refinery = $DIC->refinery();
 
         $this->plugin = ilNolejPlugin::getInstance();
 
@@ -133,7 +125,7 @@ class ilNolejManagerGUI
      * @param string $documentId
      * @return int
      */
-    public static function getObjIdFromDocumentId(string $documentId): int
+    public static function getObjIdFromDocumentId($documentId): int
     {
         global $DIC;
 
@@ -145,7 +137,7 @@ class ilNolejManagerGUI
             [$documentId]
         );
         $row = $db->fetchAssoc($result);
-        if (is_array($row)) {
+        if ($row) {
             return (int) $row["id"];
         }
         return -1;
@@ -156,7 +148,7 @@ class ilNolejManagerGUI
      * @param string $documentId
      * @return self
      */
-    public static function getInstanceByDocumentId(string $documentId): self
+    public static function getInstanceByDocumentId($documentId): self
     {
         $objId = self::getObjIdFromDocumentId($documentId);
         $refIds = ilObject::_getAllReferences($objId);
@@ -273,7 +265,7 @@ class ilNolejManagerGUI
      * @param int $status
      * @return bool
      */
-    public static function isStatusPending(int $status): bool
+    public static function isStatusPending($status): bool
     {
         return in_array(
             $status,
@@ -281,8 +273,7 @@ class ilNolejManagerGUI
                 self::STATUS_CREATION_PENDING,
                 self::STATUS_ANALYSIS_PENDING,
                 self::STATUS_ACTIVITIES_PENDING,
-            ],
-            true
+            ]
         );
     }
 
@@ -324,7 +315,17 @@ class ilNolejManagerGUI
         $this->tpl->addCss(ilNolejPlugin::PLUGIN_DIR . "/css/nolej.css");
 
         if ($this->isStatusPending($this->status)) {
-            $this->addUpdatesCheck();
+            $this->tpl->addJavaScript(ilNolejPlugin::PLUGIN_DIR . "/js/updates.js");
+            $interval = (int) $this->plugin->getConfig("interval", "1");
+
+            $this->ctrl->setParameter($this->obj_gui, "ref_id", $this->obj_gui->getNolejObject()->getRefId());
+            $redirectToUrl = $this->ctrl->getLinkTarget($this->status == self::STATUS_ACTIVITIES_PENDING ? $this->obj_gui : $this);
+
+            $this->ctrl->setParameter($this, "document_id", $this->documentId);
+            $this->ctrl->setParameter($this, "status", $this->status);
+            $updateUrl = $this->ctrl->getLinkTarget($this, self::CMD_CHECK_UPDATES);
+
+            $this->tpl->addOnLoadCode("xnlj_check_updates('{$updateUrl}', '{$redirectToUrl}', {$interval});");
         }
 
         $steps = [
@@ -385,27 +386,6 @@ class ilNolejManagerGUI
         ];
 
         return $workflow->linear($this->plugin->txt("tab_activity_management"), $steps);
-    }
-
-    /**
-     * Add the javascript that polls for status updates, while the status is pending.
-     * @return void
-     */
-    protected function addUpdatesCheck(): void
-    {
-        $this->tpl->addJavaScript(ilNolejPlugin::PLUGIN_DIR . "/js/updates.js");
-        $interval = (int) $this->plugin->getConfig("interval", "1");
-
-        $this->ctrl->setParameter($this->obj_gui, "ref_id", $this->obj_gui->getNolejObject()->getRefId());
-        $redirectToUrl = $this->ctrl->getLinkTarget(
-            $this->status == self::STATUS_ACTIVITIES_PENDING ? $this->obj_gui : $this
-        );
-
-        $this->ctrl->setParameter($this, "document_id", $this->documentId);
-        $this->ctrl->setParameter($this, "status", $this->status);
-        $updateUrl = $this->ctrl->getLinkTarget($this, self::CMD_CHECK_UPDATES);
-
-        $this->tpl->addOnLoadCode("xnlj_check_updates('{$updateUrl}', '{$redirectToUrl}', {$interval});");
     }
 
     /**
@@ -477,7 +457,7 @@ class ilNolejManagerGUI
      * @param string $id
      * @return string
      */
-    public static function glyphicon(string $id): string
+    public static function glyphicon($id): string
     {
         return "<span class=\"glyphicon glyphicon-{$id}\" aria-hidden=\"true\"></span> ";
     }
@@ -491,27 +471,27 @@ class ilNolejManagerGUI
     protected function checkUpdates(): void
     {
         // Required params.
-        if (!$this->query->has("document_id") || !$this->query->has("status")) {
+        if (!isset($_GET["document_id"], $_GET["status"])) {
             exit(0);
         }
 
-        $documentId = $this->query->retrieve("document_id", $this->refinery->kindlyTo()->string());
-        $currentStatus = $this->query->retrieve("status", $this->refinery->kindlyTo()->int());
+        $documentId = $_GET["document_id"];
+        $currentStatus = $_GET["status"];
 
         // Fetch document data.
         $set = $this->db->queryF(
-            "SELECT status FROM " . ilNolejPlugin::TABLE_DOC . " WHERE document_id = %s",
+            "SELECT status FROM " . ilNolejPlugin::TABLE_DOC . " WHERE document_id = %s;",
             ["text"],
             [$documentId]
         );
 
         $row = $this->db->fetchAssoc($set);
-        if (!is_array($row)) {
+        if (!$row) {
             // Document not found.
             exit(0);
         }
 
-        if ((int) $row["status"] !== $currentStatus) {
+        if ($row["status"] != $currentStatus) {
             // Document updated.
             echo "update";
         }
@@ -525,7 +505,7 @@ class ilNolejManagerGUI
      * @param string $filename the name of the file.
      * @return bool true if the file exists, false otherwise.
      */
-    public function hasDocumentFile(string $filename): bool
+    public function hasDocumentFile($filename): bool
     {
         return file_exists($this->dataDir . "/" . $filename);
     }
@@ -537,7 +517,7 @@ class ilNolejManagerGUI
      * @return string|false return the content if the file exists,
      *   false otherwise.
      */
-    public function readDocumentFile(string $filename): string|false
+    public function readDocumentFile($filename): string|false
     {
         $path = $this->dataDir . "/" . $filename;
         return is_file($path) ? file_get_contents($path) : false;
@@ -552,7 +532,7 @@ class ilNolejManagerGUI
      *
      * @return bool returns true on success, false on failure.
      */
-    public function writeDocumentFile(string $filename, string $content): bool
+    public function writeDocumentFile($filename, $content): bool
     {
         if (!is_dir($this->dataDir)) {
             mkdir($this->dataDir, 0775, true);
@@ -575,21 +555,19 @@ class ilNolejManagerGUI
      *
      * @return bool|string return true on success, false on failure. If $saveAs
      * is null, then the content is returned as string.
-     * @phpstan-return ($saveAs is null ? string : bool)
-     * @psalm-return ($saveAs is null ? string : bool)
      */
     public function getNolejContent(
-        string $pathname,
-        ?string $saveAs = null,
-        bool $forceDownload = false,
+        $pathname,
+        $saveAs = null,
+        $forceDownload = false,
         $withData = "",
-        bool $encode = false
+        $encode = false
     ): bool|string {
         $filepath = $this->dataDir . "/" . $saveAs;
         $api = new ilNolejAPI();
 
         if (
-            $saveAs !== null &&
+            $saveAs != null &&
             !$forceDownload &&
             is_file($filepath)
         ) {
@@ -603,9 +581,9 @@ class ilNolejManagerGUI
             false
         );
 
-        return $saveAs === null
+        return $saveAs == null
             ? $result
-            : $this->writeDocumentFile($saveAs, (string) $result);
+            : $this->writeDocumentFile($saveAs, $result);
     }
 
     /**
@@ -616,7 +594,7 @@ class ilNolejManagerGUI
      *
      * @return bool true on success, false on failure
      */
-    public function putNolejContent(string $pathname, string $filename): bool
+    public function putNolejContent($pathname, $filename): bool
     {
         $content = $this->readDocumentFile($filename);
         if (!$content) {
@@ -638,7 +616,7 @@ class ilNolejManagerGUI
      * @param int $newStatus
      * @return void
      */
-    public function updateDocumentStatus(int $newStatus): void
+    public function updateDocumentStatus($newStatus): void
     {
         $this->db->manipulateF(
             "UPDATE " . ilNolejPlugin::TABLE_DOC
@@ -655,7 +633,7 @@ class ilNolejManagerGUI
      */
     public function downloadActivities(): string
     {
-        if (!ilNolejPlugin::isH5PInstalled()) {
+        if (!ilNolejH5PIntegrationGUI::isH5PInstalled()) {
             return $this->plugin->txt("err_h5p_not_installed");
         }
 
@@ -679,7 +657,7 @@ class ilNolejManagerGUI
             ["format" => "h5p"],
             true
         );
-        if (!$json) {
+        if (!$json || !is_string($json)) {
             return $this->plugin->txt("err_json_decode");
         }
         $activities = json_decode($json);
@@ -714,14 +692,8 @@ class ilNolejManagerGUI
      * @param int $attemptsLeft
      * @return string error message. Empty string if succedeed.
      */
-    protected function downloadAndImportH5PContent(
-        string $path,
-        string $url,
-        string $h5pDir,
-        string $type,
-        int $time,
-        int $attemptsLeft
-    ): string {
+    protected function downloadAndImportH5PContent($path, $url, $h5pDir, $type, $time, $attemptsLeft): string
+    {
         if ($attemptsLeft != self::MAX_ATTEMPTS) {
             $this->plugin->log("Retrying to import H5P activity {$type} of document {$this->documentId}...");
         }
@@ -750,13 +722,13 @@ class ilNolejManagerGUI
      * @param int $time
      * @return string error message. Empty string if succedeed.
      */
-    protected function importH5PContent(string $h5pDir, string $type, int $time): string
+    protected function importH5PContent($h5pDir, $type, $time): string
     {
         $this->plugin->log("Importing H5P activity {$type} of document {$this->documentId}...");
 
         $filepath = "{$h5pDir}/{$type}.h5p";
 
-        if (!ilNolejPlugin::isH5PInstalled()) {
+        if (!ilNolejH5PIntegrationGUI::isH5PInstalled()) {
             return $this->plugin->txt("err_h5p_not_installed");
         }
 
@@ -772,6 +744,11 @@ class ilNolejManagerGUI
         if ($contentId == -1) {
             $this->plugin->log("Import failed {$type} of document {$this->documentId}");
             return $this->plugin->txt("err_h5p_package");
+        }
+
+        if (null === $contentId) {
+            $this->plugin->log("Import failed {$type} of document {$this->documentId}");
+            return $this->plugin->txt("err_content_id");
         }
 
         $this->db->insert(

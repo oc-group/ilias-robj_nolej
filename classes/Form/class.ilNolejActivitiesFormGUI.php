@@ -136,21 +136,79 @@ class ilNolejActivitiesFormGUI extends ilNolejFormGUI
             "desired_packages" => [],
         ];
 
-        foreach ($availableActivities as $activity) {
-            $useActivity = (bool) $form->getInput("activity_" . $activity);
+        for ($i = 0, $len = count($availableActivities); $i < $len; $i++) {
+            $useActivity = (bool) $form->getInput("activity_" . $availableActivities[$i]);
             if (!$useActivity) {
                 continue;
             }
 
-            $settingsToSave["desired_packages"][] = $activity;
+            $settingsToSave["desired_packages"][] = $availableActivities[$i];
 
-            $activitySettings = self::ACTIVITY_SETTINGS[$activity] ?? [];
-            if (isset($activitySettings["ibook"])) {
-                $settingsToSave["settings"][$activitySettings["ibook"]] = (bool) $form->getInput($activitySettings["ibook"]);
-            }
-            if (isset($activitySettings["number"])) {
-                $name = $activitySettings["number"][0] . "_current";
-                $settingsToSave["settings"][$name] = (int) $form->getInput($name);
+            switch ($availableActivities[$i]) {
+                case "glossary":
+                    $ibook = (bool) $form->getInput("Glossary_include_IB");
+                    $settingsToSave["settings"]["Glossary_include_IB"] = $ibook;
+                    break;
+
+                case "summary":
+                    $ibook = (bool) $form->getInput("Summary_include_IB");
+                    $settingsToSave["settings"]["Summary_include_IB"] = $ibook;
+                    break;
+
+                case "findtheword":
+                    $number = (int) $form->getInput("FTW_number_word_current");
+                    $settingsToSave["settings"]["FTW_number_word_current"] = $number;
+                    break;
+
+                case "dragtheword":
+                    $ibook = (bool) $form->getInput("DTW_include_IB");
+                    $settingsToSave["settings"]["DTW_include_IB"] = $ibook;
+                    $number = (int) $form->getInput("DTW_number_word_current");
+                    $settingsToSave["settings"]["DTW_number_word_current"] = $number;
+                    break;
+
+                case "crossword":
+                    $number = (int) $form->getInput("CW_number_word_current");
+                    $settingsToSave["settings"]["CW_number_word_current"] = $number;
+                    break;
+
+                case "practice":
+                    $ibook = (bool) $form->getInput("Practice_include_IB");
+                    $settingsToSave["settings"]["Practice_include_IB"] = $ibook;
+                    $number = (int) $form->getInput("Practice_number_flashcard_current");
+                    $settingsToSave["settings"]["Practice_number_flashcard_current"] = $number;
+                    break;
+
+                case "practiceq":
+                    $ibook = (bool) $form->getInput("PracticeQ_include_IB");
+                    $settingsToSave["settings"]["PracticeQ_include_IB"] = $ibook;
+                    $number = (int) $form->getInput("PracticeQ_number_flashcard_current");
+                    $settingsToSave["settings"]["PracticeQ_number_flashcard_current"] = $number;
+                    break;
+
+                case "grade":
+                    $ibook = (bool) $form->getInput("Grade_include_IB");
+                    $settingsToSave["settings"]["Grade_include_IB"] = $ibook;
+                    $number = (int) $form->getInput("Grade_number_question_current");
+                    $settingsToSave["settings"]["Grade_number_question_current"] = $number;
+                    break;
+
+                case "gradeq":
+                    $ibook = (bool) $form->getInput("GradeQ_include_IB");
+                    $settingsToSave["settings"]["GradeQ_include_IB"] = $ibook;
+                    $number = (int) $form->getInput("GradeQ_number_question_current");
+                    $settingsToSave["settings"]["GradeQ_number_question_current"] = $number;
+                    break;
+
+                case "flashcards":
+                    $number = (int) $form->getInput("Flashcards_number_flashcard_current");
+                    $settingsToSave["settings"]["Flashcards_number_flashcard_current"] = $number;
+                    break;
+
+                case "ivideo":
+                    $number = (int) $form->getInput("IV_number_question_perset_current");
+                    $settingsToSave["settings"]["IV_number_question_perset_current"] = $number;
+                    break;
             }
         }
 
@@ -189,7 +247,7 @@ class ilNolejActivitiesFormGUI extends ilNolejFormGUI
      * @param bool $usePost Set value from POST, if false load activities file
      * @return ilPropertyFormGUI
      */
-    protected function form(bool $usePost = false): ilPropertyFormGUI
+    protected function form($usePost = false): ilPropertyFormGUI
     {
         $form = new ilPropertyFormGUI();
         $form->setTitle($this->plugin->txt("activities_settings"));
@@ -205,10 +263,10 @@ class ilNolejActivitiesFormGUI extends ilNolejFormGUI
         $availableActivities = $settings->avaible_packages ?? [];
         $settings = $settings->settings;
 
-        foreach ($availableActivities as $availableActivity) {
+        for ($i = 0, $len = count($availableActivities); $i < $len; $i++) {
             $activity = new ilCheckboxInputGUI(
-                $this->plugin->txt("activities_" . $availableActivity),
-                "activity_" . $availableActivity
+                $this->plugin->txt("activities_" . $availableActivities[$i]),
+                "activity_" . $availableActivities[$i]
             );
 
             if ($usePost) {
@@ -218,7 +276,7 @@ class ilNolejActivitiesFormGUI extends ilNolejFormGUI
                 $activity->setChecked(true);
             }
 
-            $this->addActivitySettings($activity, $availableActivity, $settings, $usePost);
+            $this->addActivitySettings($activity, $availableActivities[$i], $settings, $usePost);
 
             $form->addItem($activity);
         }
@@ -261,7 +319,7 @@ class ilNolejActivitiesFormGUI extends ilNolejFormGUI
             $number = new ilNumberInputGUI($this->plugin->txt($labelKey), $numberName);
             $number->allowDecimals(false);
             $number->setMinValue($minValue, true);
-            $number->setMaxValue((float) $settings->{$prefix . "_max"}, true);
+            $number->setMaxValue($settings->{$prefix . "_max"}, true);
         }
 
         if ($usePost) {
@@ -270,7 +328,7 @@ class ilNolejActivitiesFormGUI extends ilNolejFormGUI
         }
         $ibookName = $activitySettings["ibook"] ?? null;
         if (!$usePost && $ibook !== null && $ibookName !== null) {
-            $ibook->setChecked((bool) $settings->{$ibookName});
+            $ibook->setChecked($settings->{$ibookName});
         }
         if (!$usePost && $number !== null) {
             $number->setValue((string) $settings->{$numberName});

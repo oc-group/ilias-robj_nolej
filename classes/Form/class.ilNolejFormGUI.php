@@ -38,15 +38,6 @@ class ilNolejFormGUI
     /** @var \Psr\Http\Message\ServerRequestInterface */
     protected \Psr\Http\Message\ServerRequestInterface $request;
 
-    /** @var \ILIAS\HTTP\Wrapper\RequestWrapper */
-    protected \ILIAS\HTTP\Wrapper\RequestWrapper $query;
-
-    /** @var \ILIAS\HTTP\Wrapper\RequestWrapper */
-    protected \ILIAS\HTTP\Wrapper\RequestWrapper $post;
-
-    /** @var \ILIAS\Refinery\Factory */
-    protected \ILIAS\Refinery\Factory $refinery;
-
     /** @var \ILIAS\UI\Renderer */
     protected \ILIAS\UI\Renderer $renderer;
 
@@ -71,7 +62,7 @@ class ilNolejFormGUI
     /**
      * @param ilNolejManagerGUI $manager
      */
-    public function __construct(ilNolejManagerGUI $manager)
+    public function __construct($manager)
     {
         global $DIC;
         $this->ctrl = $DIC->ctrl();
@@ -79,9 +70,6 @@ class ilNolejFormGUI
         $this->lng = $DIC->language();
         $this->tpl = $DIC->ui()->mainTemplate();
         $this->request = $DIC->http()->request();
-        $this->query = $DIC->http()->wrapper()->query();
-        $this->post = $DIC->http()->wrapper()->post();
-        $this->refinery = $DIC->refinery();
         $this->factory = $DIC->ui()->factory();
         $this->renderer = $DIC->ui()->renderer();
 

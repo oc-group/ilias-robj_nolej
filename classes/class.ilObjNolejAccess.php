@@ -39,7 +39,7 @@ class ilObjNolejAccess extends ilObjectPluginAccess
         int $a_obj_id,
         ?int $a_user_id = null
     ): bool {
-        if ($a_user_id === null) {
+        if ($a_user_id == null) {
             $a_user_id = $this->user->getId();
         }
 
@@ -79,12 +79,12 @@ class ilObjNolejAccess extends ilObjectPluginAccess
         $db = $DIC->database();
 
         $set = $db->queryF(
-            "SELECT is_online FROM " . ilNolejPlugin::TABLE_DATA . " WHERE id = %s",
+            "SELECT is_online FROM " . ilNolejPlugin::TABLE_DATA . " WHERE id = %s;",
             ["integer"],
             [$a_obj_id]
         );
         $rec = $db->fetchAssoc($set);
-        return !(is_array($rec) && (bool) $rec["is_online"]);
+        return !((bool) $rec["is_online"]);
     }
 
     /**

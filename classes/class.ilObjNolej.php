@@ -60,7 +60,7 @@ class ilObjNolej extends ilObjectPlugin implements ilLPStatusPluginInterface
 
         while ($row = $this->db->fetchAssoc($set)) {
             $this->setOnline((bool) ($row["is_online"] ?? false));
-            $this->setDocumentId((string) ($row["document_id"] ?? ""));
+            $this->setDocumentId($row["document_id"] ?? "");
         }
     }
 
@@ -135,8 +135,8 @@ class ilObjNolej extends ilObjectPlugin implements ilLPStatusPluginInterface
      */
     protected function lookupDocumentData(string $name): string
     {
-        if ($this->getDocumentId() === "") {
-            return "";
+        if ($this->getDocumentId() == null) {
+            return "0";
         }
 
         $result = $this->db->queryF(
@@ -147,7 +147,7 @@ class ilObjNolej extends ilObjectPlugin implements ilLPStatusPluginInterface
         );
 
         $row = $this->db->fetchAssoc($result);
-        return is_array($row) ? (string) $row[$name] : "";
+        return (string) $row[$name];
     }
 
     /**
@@ -278,18 +278,18 @@ class ilObjNolej extends ilObjectPlugin implements ilLPStatusPluginInterface
      */
     public function getContentIdOfType(string $type): int
     {
-        $this->db->setLimit(1);
         $result = $this->db->queryF(
             "SELECT content_id FROM " . ilNolejPlugin::TABLE_H5P
                 . " WHERE document_id = %s"
                 . " AND type = %s"
-                . " ORDER BY " . $this->db->quoteIdentifier("generated") . " DESC",
+                . " ORDER BY " . $this->db->quoteIdentifier("generated") . " DESC"
+                . " LIMIT 1",
             ["text", "text"],
             [$this->documentId, $type]
         );
 
         $row = $this->db->fetchAssoc($result);
-        if (is_array($row)) {
+        if ($row) {
             return (int) $row["content_id"];
         }
 
@@ -302,8 +302,8 @@ class ilObjNolej extends ilObjectPlugin implements ilLPStatusPluginInterface
      */
     public function resetLPOfUsers(array $user_ids): void
     {
-        foreach ($user_ids as $user_id) {
-            $this->resetLPOfUser((int) $user_id);
+        for ($i = 0, $n = count($user_ids); $i < $n; $i++) {
+            self::resetLPOfUser($user_ids[$i]);
         }
     }
 
@@ -322,7 +322,7 @@ class ilObjNolej extends ilObjectPlugin implements ilLPStatusPluginInterface
     public function resetLP(): void
     {
         global $DIC;
-        $this->resetLPOfUser($DIC->user()->getId());
+        self::resetLPOfUser($DIC->user()->getId());
     }
 
     /**

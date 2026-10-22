@@ -28,7 +28,7 @@ class ilNolejNotificationPrefRepository
      *
      * @param ilObjUser|null $user
      */
-    public function __construct(?ilObjUser $user = null)
+    public function __construct($user = null)
     {
         global $DIC;
 

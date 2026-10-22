@@ -66,9 +66,9 @@ class ilNolejActivity
      * @param string|null $a_action
      */
     public function __construct(
-        ?string $a_doc_id = null,
-        ?int $a_user_id = null,
-        ?string $a_action = null
+        $a_doc_id = null,
+        $a_user_id = null,
+        $a_action = null
     ) {
         global $DIC;
 
@@ -90,7 +90,7 @@ class ilNolejActivity
      * @param int $a_user_id
      * @return int
      */
-    public static function getNewCounter(int $a_user_id): int
+    public static function getNewCounter($a_user_id): int
     {
         global $DIC;
 
@@ -126,7 +126,7 @@ class ilNolejActivity
      * @param int $a_user_id
      * @return int
      */
-    public static function getLatestTimestamp(int $a_user_id): int
+    public static function getLatestTimestamp($a_user_id): int
     {
         global $DIC;
 
@@ -144,10 +144,10 @@ class ilNolejActivity
 
     /**
      * Get notifications for a user
-     * @param int $a_user_id
+     * @param mixed $a_user_id
      * @return self[]
      */
-    public static function getInstancesByUserId(int $a_user_id): array
+    public static function getInstancesByUserId($a_user_id): array
     {
         global $DIC;
 
@@ -158,7 +158,7 @@ class ilNolejActivity
         $set = $ilDB->query(
             "SELECT * FROM " . ilNolejPlugin::TABLE_ACTIVITY
             . " WHERE user_id = " . $ilDB->quote($a_user_id, "integer")
-            . " ORDER BY tstamp DESC"
+            . " ORDER BY tstamp DESC;"
         );
         while ($row = $ilDB->fetchAssoc($set)) {
             $obj = new self();
@@ -173,7 +173,7 @@ class ilNolejActivity
      * @param string $a_doc_id
      * @return self[]
      */
-    public static function getInstancesByDocumentId(string $a_doc_id): array
+    public static function getInstancesByDocumentId($a_doc_id): array
     {
         global $DIC;
 
@@ -200,7 +200,7 @@ class ilNolejActivity
      * @param string $a_doc_id
      * @return int[]
      */
-    public static function getAssignedUsers(string $a_doc_id): array
+    public static function getAssignedUsers($a_doc_id): array
     {
         $res = [];
 
@@ -218,9 +218,8 @@ class ilNolejActivity
      * @param string $a_doc_id
      * @param int $a_user_id
      * @param string $a_action
-     * @return bool
      */
-    public static function exists(string $a_doc_id, int $a_user_id, string $a_action): bool
+    public static function exists($a_doc_id, $a_user_id, $a_action): bool
     {
         $obj = new self($a_doc_id, $a_user_id, $a_action);
         return $obj->stored;
@@ -233,7 +232,7 @@ class ilNolejActivity
     /**
      * @param string $a_value
      */
-    protected function setDocumentId(string $a_value): void
+    protected function setDocumentId($a_value): void
     {
         $this->document_id = $a_value;
     }
@@ -248,11 +247,10 @@ class ilNolejActivity
 
     /**
      * @param int $a_value
-     * @return void
      */
-    protected function setUserId(int $a_value): void
+    protected function setUserId($a_value): void
     {
-        $this->user_id = $a_value;
+        $this->user_id = (int) $a_value;
     }
 
     /**
@@ -266,7 +264,7 @@ class ilNolejActivity
     /**
      * @param string $a_value
      */
-    protected function setAction(string $a_value): void
+    protected function setAction($a_value): void
     {
         $this->action = $a_value;
     }
@@ -282,9 +280,9 @@ class ilNolejActivity
     /**
      * @param int $a_value
      */
-    protected function setTimestamp(int $a_value): void
+    protected function setTimestamp($a_value): void
     {
-        $this->tstamp = $a_value;
+        $this->tstamp = (int) $a_value;
     }
 
     /**
@@ -299,7 +297,7 @@ class ilNolejActivity
      * @param string $a_status
      * @return self
      */
-    public function withStatus(string $a_status): self
+    public function withStatus($a_status): self
     {
         $this->status = $a_status;
         return $this;
@@ -309,7 +307,7 @@ class ilNolejActivity
      * @param int $a_code
      * @return self
      */
-    public function withCode(int $a_code): self
+    public function withCode($a_code): self
     {
         $this->code = $a_code;
         return $this;
@@ -319,7 +317,7 @@ class ilNolejActivity
      * @param string $a_error_message
      * @return self
      */
-    public function withErrorMessage(string $a_error_message): self
+    public function withErrorMessage($a_error_message): self
     {
         $this->error_message = $a_error_message;
         return $this;
@@ -329,7 +327,7 @@ class ilNolejActivity
      * @param int $a_consumed_credit
      * @return self
      */
-    public function withConsumedCredit(int $a_consumed_credit): self
+    public function withConsumedCredit($a_consumed_credit): self
     {
         $this->consumed_credit = $a_consumed_credit;
         return $this;
@@ -343,24 +341,23 @@ class ilNolejActivity
     protected function importDBRow(array $a_row): void
     {
         $this->stored = true;
-        $this->setDocumentId((string) $a_row["document_id"]);
-        $this->setUserId((int) $a_row["user_id"]);
-        $this->setAction((string) $a_row["action"]);
-        $this->setTimestamp((int) $a_row["tstamp"]);
-        $this->status = isset($a_row["status"]) ? (string) $a_row["status"] : null;
+        $this->setDocumentId($a_row["document_id"]);
+        $this->setUserId($a_row["user_id"]);
+        $this->setAction($a_row["action"]);
+        $this->setTimestamp($a_row["tstamp"]);
+        $this->status = $a_row["status"];
         $this->code = (int) $a_row["code"];
-        $this->error_message = (string) $a_row["error_message"];
+        $this->error_message = $a_row["error_message"];
         $this->consumed_credit = isset($a_row["consumed_credit"]) ? (int) $a_row["consumed_credit"] : null;
-        $this->notified = (string) $a_row["notified"];
+        $this->notified = $a_row["notified"];
     }
 
     /**
      * @param string $a_doc_id
      * @param int $a_user_id
      * @param string $a_action
-     * @return void
      */
-    protected function read(string $a_doc_id, int $a_user_id, string $a_action): void
+    protected function read($a_doc_id, $a_user_id, $a_action): void
     {
         $ilDB = $this->db;
 
@@ -371,7 +368,7 @@ class ilNolejActivity
             [$a_doc_id, $a_user_id, $a_action]
         );
         $row = $ilDB->fetchAssoc($set);
-        if (is_array($row) && $row["user_id"]) {
+        if ($row && $row["user_id"]) {
             $this->importDBRow($row);
             return;
         }
@@ -387,7 +384,7 @@ class ilNolejActivity
         return [
             "tstamp" => [
                 "integer",
-                $this->stored ? $this->getTimestamp() : time()
+                (bool) $this->stored ? $this->getTimestamp() : time()
             ],
             "status" => [
                 "text",
@@ -414,6 +411,7 @@ class ilNolejActivity
 
     /**
      * @return void
+     * @SuppressWarnings("PHPMD.DevelopmentCodeFragment")
      */
     public function store(): void
     {
@@ -426,11 +424,11 @@ class ilNolejActivity
             !$this->getAction()
         ) {
             $DIC->ui()->mainTemplate()->setOnScreenMessage("failure", "Some value null", true);
-            $this->plugin->log("Notification: some values are null: " . (string) json_encode([
+            $this->plugin->log("Notification: some values are null: " . print_r([
                 "documentId" => $this->getDocumentId(),
                 "userId" => $this->getUserId(),
                 "action" => $this->getAction()
-            ]));
+            ], true));
             return;
         }
 
@@ -441,7 +439,7 @@ class ilNolejActivity
         ];
         $fields = $this->getPropertiesForStorage();
 
-        if (!$this->stored) {
+        if (!(bool) $this->stored) {
             $ilDB->insert(ilNolejPlugin::TABLE_ACTIVITY, $fields + $keys);
             return;
         }
@@ -474,9 +472,8 @@ class ilNolejActivity
 
     /**
      * @param int $a_user_id
-     * @return void
      */
-    public static function deleteByUserId(int $a_user_id): void
+    public static function deleteByUserId($a_user_id): void
     {
         foreach (self::getInstancesByUserId($a_user_id) as $ass) {
             $ass->delete();
@@ -485,9 +482,8 @@ class ilNolejActivity
 
     /**
      * @param string $a_doc_id
-     * @return void
      */
-    public static function deleteByDocumentId(string $a_doc_id): void
+    public static function deleteByDocumentId($a_doc_id): void
     {
         foreach (self::getInstancesByDocumentId($a_doc_id) as $ass) {
             $ass->delete();
@@ -501,7 +497,7 @@ class ilNolejActivity
      * @param int|null $a_ts_to
      * @return self[]
      */
-    public static function getActivitiesForUser(int $a_user_id, int $a_ts_from, ?int $a_ts_to = null): array
+    public static function getActivitiesForUser($a_user_id, $a_ts_from, $a_ts_to = null): array
     {
         global $DIC;
         $db = $DIC->database();
@@ -520,7 +516,7 @@ class ilNolejActivity
             . "   AND notified = 'n'"
             . "   GROUP BY user_id, document_id"
             . " )"
-            . " ORDER BY tstamp DESC",
+            . " ORDER BY tstamp DESC;",
             ["integer", "integer", "integer", "integer", "integer", "integer"],
             [$a_user_id, $a_ts_from, $a_ts_to, $a_user_id, $a_ts_from, $a_ts_to]
         );
@@ -548,12 +544,12 @@ class ilNolejActivity
 
         $res = $db->queryF(
             "SELECT id FROM " . ilNolejPlugin::TABLE_DATA
-            . " WHERE document_id = %s",
+            . " WHERE document_id = %s;",
             ["text"],
             [$this->getDocumentId()]
         );
         $row = $db->fetchAssoc($res);
-        $this->objId = is_array($row) ? (int) $row["id"] : 0;
+        $this->objId = (int) $row["id"];
         return $this->objId;
     }
 
@@ -580,7 +576,7 @@ class ilNolejActivity
         }
         $refs = ilObject::_getAllReferences($objId);
         if (count($refs) > 0) {
-            return (int) array_values($refs)[0];
+            return array_values($refs)[0];
         }
         return null;
     }

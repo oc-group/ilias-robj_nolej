@@ -14,7 +14,7 @@ function xnlj_check_updates(endpoint, redirectTo, interval = 10) {
         fetch(endpoint, { credentials: "same-origin" })
             .then((response) => response.text())
             .then((text) => {
-                if (text.trim() == "update") {
+                if (text == "update") {
                     window.location = redirectTo;
                 }
             })

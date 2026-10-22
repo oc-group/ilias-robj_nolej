@@ -12,6 +12,7 @@
 
 declare(strict_types=1);
 
+use ILIAS\GlobalScreen\Scope\MainMenu\Collector\Renderer\Hasher;
 use ILIAS\UI\Component\Listing\Workflow\Step;
 
 /**
@@ -22,6 +23,8 @@ use ILIAS\UI\Component\Listing\Workflow\Step;
  */
 class ilObjNolejGUI extends ilObjectPluginGUI
 {
+    use Hasher;
+
     /** @var string */
     public const LP_SESSION_ID = "xnlj_lp_session_state";
 
@@ -370,7 +373,7 @@ class ilObjNolejGUI extends ilObjectPluginGUI
      * @param ilPropertyFormGUI $form
      * @return void
      */
-    protected function addValuesToForm(ilPropertyFormGUI $form): void
+    protected function addValuesToForm(&$form): void
     {
         $form->setValuesByArray([
             self::PROP_TITLE => $this->getNolejObject()->getTitle(),
@@ -407,15 +410,14 @@ class ilObjNolejGUI extends ilObjectPluginGUI
         $db = $DIC->database();
         $workflow = $DIC->ui()->factory()->listing()->workflow();
         $renderer = $DIC->ui()->renderer();
-        $generated = $db->quoteIdentifier("generated");
 
         $result = $db->queryF(
             "SELECT * FROM " . ilNolejPlugin::TABLE_H5P
                 . " WHERE document_id = %s"
-                . " AND " . $generated . " = ("
-                . " SELECT MAX(" . $generated . ") FROM " . ilNolejPlugin::TABLE_H5P
+                . " AND " . $db->quoteIdentifier("generated") . " = ("
+                . " SELECT MAX(" . $db->quoteIdentifier("generated") . ") FROM " . ilNolejPlugin::TABLE_H5P
                 . " WHERE document_id = %s"
-                . ") ORDER BY CASE WHEN type = 'ibook' THEN 0 ELSE 1 END ASC, type ASC",
+                . ") ORDER BY (type = 'ibook') DESC, type ASC;",
             ["text", "text"],
             [$this->getNolejObject()->getDocumentId(), $this->getNolejObject()->getDocumentId()]
         );
@@ -497,10 +499,10 @@ class ilObjNolejGUI extends ilObjectPluginGUI
     /**
      * Get the HTML of an H5P activity.
      * @deprecated
-     * @param int|string $contentId
+     * @param int $contentId
      * @return string html
      */
-    public static function getH5PHtml(int|string $contentId): string
+    public static function getH5PHtml($contentId): string
     {
         return ilNolejPlugin::renderH5P($contentId);
     }
@@ -510,10 +512,10 @@ class ilObjNolejGUI extends ilObjectPluginGUI
      * @param ilPropertyFormGUI $form
      * @return void
      */
-    private function fillObject(ilObjNolej $object, ilPropertyFormGUI $form): void
+    private function fillObject($object, $form)
     {
-        $object->setTitle((string) $form->getInput(self::PROP_TITLE));
-        $object->setDescription((string) $form->getInput(self::PROP_DESCRIPTION));
+        $object->setTitle($form->getInput(self::PROP_TITLE));
+        $object->setDescription($form->getInput(self::PROP_DESCRIPTION));
         $object->setOnline((bool) $form->getInput(self::PROP_ONLINE));
     }
 

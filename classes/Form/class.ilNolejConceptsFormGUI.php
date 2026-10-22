@@ -61,7 +61,7 @@ class ilNolejConceptsFormGUI extends ilNolejFormGUI
 
         $concepts = [];
 
-        $length = (int) $form->getInput("concepts_count");
+        $length = $form->getInput("concepts_count");
         for ($i = 0; $i < $length; $i++) {
             $id = $form->getInput("concept_{$i}_id");
             $enable = (bool) $form->getInput("concept_{$i}_enable");
@@ -74,7 +74,7 @@ class ilNolejConceptsFormGUI extends ilNolejFormGUI
             $label = $form->getInput("concept_{$i}_label");
             $language = $form->getInput("concept_{$i}_language");
             $definition = $form->getInput("concept_{$i}_definition");
-            $games = json_decode((string) $form->getInput("concept_{$i}_games"));
+            $games = json_decode($form->getInput("concept_{$i}_games"));
 
             if (!empty($id)) {
                 $concepts[] = [
@@ -119,7 +119,7 @@ class ilNolejConceptsFormGUI extends ilNolejFormGUI
      * @param bool $usePost Set value from POST, if false load concepts file
      * @return ilPropertyFormGUI
      */
-    protected function form(bool $usePost = false): ilPropertyFormGUI
+    protected function form($usePost = false): ilPropertyFormGUI
     {
         $form = new ilPropertyFormGUI();
         $form->setTitle($this->plugin->txt("review_concepts"));
@@ -140,18 +140,18 @@ class ilNolejConceptsFormGUI extends ilNolejFormGUI
         $form->addItem($length_input);
         for ($i = 0; $i < $length; $i++) {
             $section = new ilFormSectionHeaderGUI();
-            $section->setTitle((string) $concepts[$i]->concept->label);
+            $section->setTitle($concepts[$i]->concept->label);
             $form->addItem($section);
 
             $id = new ilHiddenInputGUI("concept_{$i}_id");
-            $id->setValue((string) $concepts[$i]->id);
+            $id->setValue($concepts[$i]->id);
             $form->addItem($id);
 
             $label = new ilTextInputGUI(
                 $this->plugin->txt("concepts_label"),
                 "concept_{$i}_label"
             );
-            $label->setValue((string) $concepts[$i]->concept->label);
+            $label->setValue($concepts[$i]->concept->label);
             $form->addItem($label);
 
             $enable = new ilCheckboxInputGUI(
@@ -212,7 +212,7 @@ class ilNolejConceptsFormGUI extends ilNolejFormGUI
             $form->addItem($useForPractice);
 
             $language = new ilHiddenInputGUI("concept_{$i}_language");
-            $language->setValue((string) $concepts[$i]->concept->language);
+            $language->setValue($concepts[$i]->concept->language);
             $form->addItem($language);
 
             $games = new ilHiddenInputGUI("concept_{$i}_games");
@@ -231,14 +231,14 @@ class ilNolejConceptsFormGUI extends ilNolejFormGUI
                 continue;
             }
 
-            $enable->setChecked((bool) $concepts[$i]->enable);
-            $useForCW->setChecked((bool) $concepts[$i]->use_for_cw);
-            $useForDTW->setChecked((bool) $concepts[$i]->use_for_dtw);
-            $useForFTW->setChecked((bool) $concepts[$i]->use_for_ftw);
-            $useForGaming->setChecked((bool) $concepts[$i]->use_for_gaming);
-            $useForPractice->setChecked((bool) $concepts[$i]->use_for_practice);
+            $enable->setChecked($concepts[$i]->enable);
+            $useForCW->setChecked($concepts[$i]->use_for_cw);
+            $useForDTW->setChecked($concepts[$i]->use_for_dtw);
+            $useForFTW->setChecked($concepts[$i]->use_for_ftw);
+            $useForGaming->setChecked($concepts[$i]->use_for_gaming);
+            $useForPractice->setChecked($concepts[$i]->use_for_practice);
             // $useForAssessment->setChecked($concepts[$i]->use_for_assessment);
-            $definition->setValue((string) $concepts[$i]->concept->definition);
+            $definition->setValue($concepts[$i]->concept->definition);
         }
 
         $form->addCommandButton(self::CMD_SAVE, $this->lng->txt("save"));

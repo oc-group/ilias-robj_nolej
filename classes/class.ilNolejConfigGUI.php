@@ -43,9 +43,6 @@ class ilNolejConfigGUI extends ilPluginConfigGUI
     /** @var ilLanguage */
     protected ilLanguage $lng;
 
-    /** @var ilGlobalTemplateInterface */
-    protected ilGlobalTemplateInterface $tpl;
-
     /** @var ilNolejPlugin */
     protected ilNolejPlugin $plugin;
 
@@ -56,13 +53,13 @@ class ilNolejConfigGUI extends ilPluginConfigGUI
         $this->tabs = $DIC->tabs();
         $this->db = $DIC->database();
         $this->lng = $DIC->language();
-        $this->tpl = $DIC->ui()->mainTemplate();
 
         $this->lng->loadLanguageModule(ilNolejPlugin::PREFIX);
         $this->plugin = ilNolejPlugin::getInstance();
 
-        $this->tpl->setTitleIcon(ilNolejPlugin::PLUGIN_DIR . "/templates/images/icon_xnlj.svg");
-        $this->tpl->setTitle($this->plugin->txt("plugin_title"), false);
+        $tpl = $DIC->ui()->mainTemplate();
+        $tpl->setTitleIcon(ilNolejPlugin::PLUGIN_DIR . "/templates/images/icon_xnlj.svg");
+        $tpl->setTitle($this->plugin->txt("plugin_title"), false);
     }
 
     /**
@@ -88,8 +85,11 @@ class ilNolejConfigGUI extends ilPluginConfigGUI
      * @param ?string $active_tab
      * @return void
      */
-    protected function initTabs(?string $active_tab = null): void
+    protected function initTabs($active_tab = null): void
     {
+        global $DIC;
+        $tpl = $DIC->ui()->mainTemplate();
+
         $this->tabs->addTab(
             self::TAB_CONFIGURE,
             $this->plugin->txt("tab_" . self::TAB_CONFIGURE),
@@ -100,10 +100,10 @@ class ilNolejConfigGUI extends ilPluginConfigGUI
             case self::TAB_CONFIGURE:
             default:
                 $this->tabs->activateTab(self::TAB_CONFIGURE);
-                $this->tpl->setTitle($this->plugin->txt("plugin_title"), false);
+                $tpl->setTitle($this->plugin->txt("plugin_title"), false);
         }
 
-        $this->tpl->setDescription($this->plugin->txt("plugin_description"));
+        $tpl->setDescription($this->plugin->txt("plugin_description"));
     }
 
     /**
@@ -151,24 +151,26 @@ class ilNolejConfigGUI extends ilPluginConfigGUI
      */
     public function save(): void
     {
+        global $DIC;
+
         $form = $this->initConfigurationForm();
 
         // Check form input.
         if (!$form->checkInput()) {
             // Input not ok.
             $form->setValuesByPost();
-            $this->tpl->setContent($form->getHTML());
+            $DIC->ui()->mainTemplate()->setContent($form->getHTML());
             return;
         }
 
         // Save API Key.
         $api_key = $form->getInput("api_key");
         if (!empty($api_key) && $api_key != self::SECRET) {
-            $this->plugin->saveConfig("api_key", (string) $api_key);
+            $this->plugin->saveConfig("api_key", $api_key);
         }
 
         // Save interval.
-        $this->plugin->saveConfig("interval", (string) $form->getInput("interval"));
+        $this->plugin->saveConfig("interval", $form->getInput("interval"));
 
         $this->ctrl->redirect($this, self::CMD_CONFIGURE);
     }
@@ -179,7 +181,9 @@ class ilNolejConfigGUI extends ilPluginConfigGUI
      */
     public function configure(): void
     {
+        global $DIC;
+
         $form = $this->initConfigurationForm();
-        $this->tpl->setContent($form->getHTML());
+        $DIC->ui()->mainTemplate()->setContent($form->getHTML());
     }
 }

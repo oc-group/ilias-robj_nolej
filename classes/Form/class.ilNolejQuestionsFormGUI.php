@@ -12,6 +12,7 @@
 
 declare(strict_types=1);
 
+use ILIAS\UI\Component\Listing\Workflow\Step;
 use Nolej\ilTextAreaInputGUI;
 
 /**
@@ -51,7 +52,9 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
      */
     public function saveForm(): void
     {
-        if ($this->status < ilNolejManagerGUI::STATUS_REVISION) {
+        $status = $this->status;
+
+        if ($status < ilNolejManagerGUI::STATUS_REVISION) {
             $this->tpl->setContent($this->infoBox($this->plugin->txt("err_analysis_not_ready")));
             $this->tpl->setRightContent(
                 $this->renderer->render($this->manager->getWorkflow()->withActive(3))
@@ -80,7 +83,7 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
         $questions = json_decode($json);
         $questions = $questions->questions;
 
-        $length = (int) $form->getInput("questions_count");
+        $length = $form->getInput("questions_count");
         for ($i = 0; $i < $length; $i++) {
             $question = $this->readQuestion($form, $i);
             if ($question !== null) {
@@ -120,7 +123,15 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
         }
 
         $questionType = $form->getInput("question_{$i}_type");
-        $isEnabled = (bool) $form->getInput("question_{$i}_enable");
+
+        $enable = false;
+        $useForGrading = false;
+        if ($questionType == "open") {
+            $enable = (bool) $form->getInput("question_{$i}_enable");
+        }
+        if ($questionType != "open") {
+            $useForGrading = (bool) $form->getInput("question_{$i}_enable");
+        }
 
         $answer = $questionType == "hoq"
             ? ""
@@ -130,7 +141,7 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
             ? ""
             : $form->getInput("question_{$i}_question");
 
-        $distractorsCount = (int) $form->getInput("question_{$i}_distractors");
+        $distractorsCount = $form->getInput("question_{$i}_distractors");
         $distractors = [];
         for ($j = 0; $j < $distractorsCount; $j++) {
             $distractor = $form->getInput("question_{$i}_distractor_{$j}");
@@ -145,9 +156,9 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
         return [
             "id" => $id,
             "explanation" => "false",
-            "enable" => $questionType == "open" && $isEnabled,
+            "enable" => $enable,
             "answer" => $answer,
-            "use_for_grading" => $questionType != "open" && $isEnabled,
+            "use_for_grading" => $useForGrading,
             "question" => $question,
             "question_type" => $questionType,
             "distractors" => $distractors,
@@ -156,24 +167,11 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
     }
 
     /**
-     * Get the question type to filter the questions, from the query.
-     * @return string empty string if there is no filter.
-     */
-    protected function getQuestionTypeFilter(): string
-    {
-        if (!$this->query->has("filter_type")) {
-            return "";
-        }
-
-        return $this->query->retrieve("filter_type", $this->refinery->kindlyTo()->string());
-    }
-
-    /**
      * Init questions form.
      * @param bool $usePost Set value from POST, if false load questions file
      * @return ilPropertyFormGUI
      */
-    protected function form(bool $usePost = false): ilPropertyFormGUI
+    protected function form($usePost = false): ilPropertyFormGUI
     {
         $form = new ilPropertyFormGUI();
         $form->setTitle($this->plugin->txt("review_questions"));
@@ -186,7 +184,7 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
             return $form;
         }
 
-        $questionTypeFilter = $this->getQuestionTypeFilter();
+        $questionTypeFilter = $_GET["filter_type"] ?? "";
         $questionTypes = [];
 
         $questions = json_decode($json);
@@ -211,7 +209,27 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
             $this->addQuestionItems($form, $questions[$i], $i, $usePost);
         }
 
-        $form->setDescription($this->filterControl($questionTypes, $questionTypeFilter, $length));
+        // Use view control to filter questions.
+        $target = $this->ctrl->getLinkTarget($this, self::CMD_SHOW);
+        $all = sprintf("%s (%d)", $this->plugin->txt("questions_type_all"), $length);
+        $actions = [
+            $all => $target,
+        ];
+
+        $selectedAction = $all;
+        foreach ($questionTypes as $type => $count) {
+            $title = $this->plugin->txt("questions_type_{$type}");
+            $key = "{$title} ({$count})";
+            $actions[$key] = "{$target}&filter_type={$type}";
+            if ($type == $questionTypeFilter) {
+                $selectedAction = $key;
+            }
+        }
+        $viewControl = $this->factory->viewControl()
+            ->mode($actions, $this->plugin->txt("questions_question_type"))
+            ->withActive($selectedAction);
+
+        $form->setDescription($this->renderer->render([$this->factory->divider()->horizontal(), $viewControl]));
 
         $this->ctrl->setParameter($this, "filter_type", $questionTypeFilter);
         $form->addCommandButton(self::CMD_SAVE, $this->lng->txt("save"));
@@ -237,7 +255,7 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
         $form->addItem($section);
 
         $id = new ilHiddenInputGUI("question_{$i}_id");
-        $id->setValue((string) $question->id);
+        $id->setValue($question->id);
         $form->addItem($id);
 
         // Text of the question.
@@ -252,7 +270,7 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
 
         // Question type.
         $questionType = new ilHiddenInputGUI("question_{$i}_type");
-        $questionType->setValue((string) $type);
+        $questionType->setValue($type);
         $form->addItem($questionType);
 
         $questionTypeLabel = new ilNonEditableValueGUI(
@@ -293,9 +311,9 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
             return;
         }
 
-        $enable->setChecked((bool) ($type == "open" ? $question->enable : $question->use_for_grading));
-        $answer?->setValue((string) $question->answer);
-        $questionInput?->setValue((string) $question->question);
+        $enable->setChecked($type == "open" ? $question->enable : $question->use_for_grading);
+        $answer?->setValue($question->answer);
+        $questionInput?->setValue($question->question);
     }
 
     /**
@@ -336,7 +354,7 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
                 $distractor->setValueByArray($this->getPostData());
                 continue;
             }
-            $distractor->setValue((string) $question->distractors[$j]);
+            $distractor->setValue($question->distractors[$j]);
         }
 
         // Choose distractor.
@@ -357,37 +375,6 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
             $useDistractor->setValueByArray($this->getPostData());
             return;
         }
-        $useDistractor->setValue((string) $question->selected_distractor);
-    }
-
-    /**
-     * Use view control to filter questions.
-     * @param array<string, int> $questionTypes number of questions per type
-     * @param string $questionTypeFilter the selected type
-     * @param int $length total number of questions
-     * @return string html
-     */
-    protected function filterControl(array $questionTypes, string $questionTypeFilter, int $length): string
-    {
-        $target = $this->ctrl->getLinkTarget($this, self::CMD_SHOW);
-        $all = sprintf("%s (%d)", $this->plugin->txt("questions_type_all"), $length);
-        $actions = [
-            $all => $target,
-        ];
-
-        $selectedAction = $all;
-        foreach ($questionTypes as $type => $count) {
-            $title = $this->plugin->txt("questions_type_{$type}");
-            $key = "{$title} ({$count})";
-            $actions[$key] = "{$target}&filter_type={$type}";
-            if ($type == $questionTypeFilter) {
-                $selectedAction = $key;
-            }
-        }
-        $viewControl = $this->factory->viewControl()
-            ->mode($actions, $this->plugin->txt("questions_question_type"))
-            ->withActive($selectedAction);
-
-        return $this->renderer->render([$this->factory->divider()->horizontal(), $viewControl]);
+        $useDistractor->setValue($question->selected_distractor);
     }
 }

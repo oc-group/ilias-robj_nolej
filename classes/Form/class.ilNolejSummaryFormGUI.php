@@ -74,7 +74,7 @@ class ilNolejSummaryFormGUI extends ilNolejFormGUI
         ];
 
         // Summary.
-        $length = (int) $form->getInput("summary_count");
+        $length = $form->getInput("summary_count");
         for ($i = 0; $i < $length; $i++) {
             $title = $form->getInput("summary_{$i}_title");
             $txt = $form->getInput("summary_{$i}_text");
@@ -92,7 +92,7 @@ class ilNolejSummaryFormGUI extends ilNolejFormGUI
             : "";
 
         // Keypoints.
-        $length = (int) $form->getInput("keypoints_count");
+        $length = $form->getInput("keypoints_count");
         for ($i = 0; $i < $length; $i++) {
             $txt = $form->getInput("keypoints_{$i}");
             if (!empty($txt)) {
@@ -120,7 +120,7 @@ class ilNolejSummaryFormGUI extends ilNolejFormGUI
      * @param bool $usePost Set value from POST, otherwise load summary file
      * @return ilPropertyFormGUI
      */
-    protected function form(bool $usePost = false): ilPropertyFormGUI
+    protected function form($usePost = false): ilPropertyFormGUI
     {
         $form = new ilPropertyFormGUI();
 
@@ -162,8 +162,8 @@ class ilNolejSummaryFormGUI extends ilNolejFormGUI
                 continue;
             }
 
-            $txt->setValue((string) $summary->summary[$i]->text);
-            $title->setValue((string) $summary->summary[$i]->title);
+            $txt->setValue($summary->summary[$i]->text);
+            $title->setValue($summary->summary[$i]->title);
         }
 
         // Abstract.
@@ -177,7 +177,7 @@ class ilNolejSummaryFormGUI extends ilNolejFormGUI
                 $txt->setValueByArray($this->getPostData());
             }
             if (!$usePost) {
-                $txt->setValue((string) $summary->abstract);
+                $txt->setValue($summary->abstract);
             }
             $txt->setRows(10);
             $form->addItem($txt);
@@ -198,7 +198,7 @@ class ilNolejSummaryFormGUI extends ilNolejFormGUI
                 $txt->setValueByArray($this->getPostData());
             }
             if (!$usePost) {
-                $txt->setValue((string) $summary->keypoints[$i]);
+                $txt->setValue($summary->keypoints[$i]);
             }
             $txt->setRows(2);
             $form->addItem($txt);
