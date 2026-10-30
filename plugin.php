@@ -11,12 +11,12 @@
  */
 
 $id = "xnlj";
-$version = "10.2.4";
+$version = "10.2.5";
 
 $ilias_min_version = "10.0";
 $ilias_max_version = "10.999";
 
-$responsible = "OC Open Consulting SB srl";
+$responsible = "OC Open Consulting SB Srl";
 $responsible_mail = "plugins@oc-group.eu";
 
 $supports_export = false;

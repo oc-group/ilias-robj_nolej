@@ -15,8 +15,12 @@ declare(strict_types=1);
 /**
  * Transcription Form GUI class.
  *
- * @ilCtrl_Calls ilNolejTranscriptionFormGUI: ilNolejConceptsFormGUI, ilNolejQuestionsFormGUI, ilNolejSummaryFormGUI
- * @ilCtrl_isCalledBy ilNolejTranscriptionFormGUI: ilObjPluginDispatchGUI, ilObjNolejGUI, ilNolejManagerGUI
+ * @ilCtrl_Calls ilNolejTranscriptionFormGUI: ilNolejConceptsFormGUI
+ * @ilCtrl_Calls ilNolejTranscriptionFormGUI: ilNolejQuestionsFormGUI
+ * @ilCtrl_Calls ilNolejTranscriptionFormGUI: ilNolejSummaryFormGUI
+ * @ilCtrl_isCalledBy ilNolejTranscriptionFormGUI: ilObjPluginDispatchGUI
+ * @ilCtrl_isCalledBy ilNolejTranscriptionFormGUI: ilObjNolejGUI
+ * @ilCtrl_isCalledBy ilNolejTranscriptionFormGUI: ilNolejManagerGUI
  */
 class ilNolejTranscriptionFormGUI extends ilNolejFormGUI
 {
@@ -40,7 +44,7 @@ class ilNolejTranscriptionFormGUI extends ilNolejFormGUI
 
         $errorMessage = $this->downloadTranscription();
         if (null !== $errorMessage) {
-            $this->tpl->setOnScreenMessage("failure", $errorMessage);
+            $this->showFailure($errorMessage);
             return;
         }
 
@@ -83,7 +87,7 @@ class ilNolejTranscriptionFormGUI extends ilNolejFormGUI
         $errorMessage = $this->runAnalysis($title, $transcription, false);
         if (!empty($errorMessage)) {
             // An error occurred.
-            $this->tpl->setOnScreenMessage("failure", $errorMessage);
+            $this->showFailure($errorMessage);
             $this->manager->updateDocumentStatus(ilNolejManagerGUI::STATUS_FAILED);
 
             $ass = new ilNolejActivity($this->documentId, $DIC->user()->getId(), "analysis");
@@ -116,7 +120,11 @@ class ilNolejTranscriptionFormGUI extends ilNolejFormGUI
 
         if ($this->status != ilNolejManagerGUI::STATUS_ANALYSIS) {
             $form->setTitle($objTitle);
-            $form->setDescription($content ? $content : "---");
+            $form->setDescription(
+                $content
+                    ? ilUtil::stripScriptHTML($content, "<h1><h2><h3><p><ul><ol><li><br><strong><u><i>")
+                    : "---"
+            );
             return $form;
         }
 
@@ -175,13 +183,14 @@ class ilNolejTranscriptionFormGUI extends ilNolejFormGUI
         $result = $api->get("/documents/{$this->documentId}/transcription");
 
         if (
+            !$api->lastRequestSucceeded() ||
             !is_object($result) ||
             !property_exists($result, "title") ||
             !is_string($result->title) ||
             !property_exists($result, "result") ||
             !is_string($result->result)
         ) {
-            return $this->plugin->txt("err_transcription_get") . print_r($result, true);
+            return $this->plugin->txt("err_transcription_get") . ": " . print_r($result, true);
         }
 
         $title = $result->title;
@@ -191,12 +200,12 @@ class ilNolejTranscriptionFormGUI extends ilNolejFormGUI
             [$title, $this->documentId]
         );
 
-        $success = $this->manager->writeDocumentFile(
-            "transcription.htm",
-            (string) file_get_contents($result->result)
-        );
+        // An empty download is an error.
+        $content = $api->downloadUrl($result->result);
+        $success = $content !== ""
+            && $this->manager->writeDocumentFile("transcription.htm", $content);
         if (!$success) {
-            return $this->plugin->txt("err_transcription_download") . print_r($result, true);
+            return $this->plugin->txt("err_transcription_download") . ": " . print_r($result, true);
         }
 
         return null;
@@ -205,7 +214,8 @@ class ilNolejTranscriptionFormGUI extends ilNolejFormGUI
     /**
      * Call Nolej API to start the analysis.
      * @param string $title
-     * @param ?string $transcription null to start analysis with no transcription changes.
+     * @param ?string $transcription null to start analysis with no
+     *   transcription changes.
      * @param bool $automaticMode
      * @return string $errorMessage empty on success
      * @SuppressWarnings("PHPMD.DevelopmentCodeFragment")

@@ -137,15 +137,17 @@ $fields = [
         "notnull" => true
     ],
     "status" => [
-        // 0 => idle,
-        // 1 => transcription in progress,
-        // 2 => transcription ready,
-        // 3 => analysis in progress,
-        // 4 => analysis ready,
-        // 5 => review in progress,
-        // 6 => review complete,
-        // 7 => h5p generation in progress,
-        // 8 => h5p generation complete.
+        /*
+         * 0 => idle,
+         * 1 => transcription in progress,
+         * 2 => transcription ready,
+         * 3 => analysis in progress,
+         * 4 => analysis ready,
+         * 5 => review in progress,
+         * 6 => review complete,
+         * 7 => h5p generation in progress,
+         * 8 => h5p generation complete.
+         */
         "type" => "integer",
         "length" => 4,
         "notnull" => true
@@ -334,6 +336,27 @@ if ($ilDB->tableColumnExists("rep_robj_xnlj_doc", "doc_url")) {
             "default" => null,
         ]
     );
+}
+
+?>
+
+<#6>
+<?php
+
+// Move the configuration to ilSetting; the API key is encrypted by the
+// plugin on first read (the setup has no filesystem service for the key).
+if ($ilDB->tableExists("rep_robj_xnlj_config")) {
+    $setting = new ilSetting("plugin_xnlj");
+    $result = $ilDB->query(
+        "SELECT keyword, value FROM rep_robj_xnlj_config"
+        . " WHERE keyword IN ('api_key', 'interval')"
+    );
+    while ($row = $ilDB->fetchAssoc($result)) {
+        if ((string) $row["value"] !== "") {
+            $setting->set((string) $row["keyword"], (string) $row["value"]);
+        }
+    }
+    $ilDB->dropTable("rep_robj_xnlj_config");
 }
 
 ?>

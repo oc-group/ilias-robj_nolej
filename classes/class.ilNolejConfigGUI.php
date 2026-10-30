@@ -31,8 +31,8 @@ class ilNolejConfigGUI extends ilPluginConfigGUI
     /** @var string */
     public const TAB_CONFIGURE = "configuration";
 
-    /** @var ilCtrl */
-    protected ilCtrl $ctrl;
+    /** @var ilCtrlInterface */
+    protected ilCtrlInterface $ctrl;
 
     /** @var ilTabsGUI */
     protected ilTabsGUI $tabs;
@@ -58,7 +58,7 @@ class ilNolejConfigGUI extends ilPluginConfigGUI
         $this->plugin = ilNolejPlugin::getInstance();
 
         $tpl = $DIC->ui()->mainTemplate();
-        $tpl->setTitleIcon(ilNolejPlugin::PLUGIN_DIR . "/templates/images/icon_xnlj.svg");
+        $tpl->setTitleIcon($this->plugin->getRelativeDirectory() . "/templates/images/icon_xnlj.svg");
         $tpl->setTitle($this->plugin->txt("plugin_title"), false);
     }
 
@@ -128,14 +128,14 @@ class ilNolejConfigGUI extends ilPluginConfigGUI
         $api_key->setDisableHtmlAutoComplete(true);
         $api_key->setRequired(true);
         $api_key->setInfo($this->plugin->txt("api_key_info"));
-        $api_key->setValue(ilNolejAPI::hasKey() ? self::SECRET : ""); // Hide key for security.
+        $api_key->setValue((new ilNolejSettings())->hasApiKey() ? self::SECRET : ""); // Hide key for security.
         $form->addItem($api_key);
 
         // Updates interval.
         $interval = new ilNumberInputGUI($this->plugin->txt("config_interval"), "interval");
         $interval->setRequired(true);
         $interval->setInfo($this->plugin->txt("config_interval_info"));
-        $interval->setValue($this->plugin->getConfig("interval", "1"));
+        $interval->setValue((string) (new ilNolejSettings())->getInterval());
         $interval->allowDecimals(false);
         $interval->setMinValue(1, true);
         $form->addItem($interval);
@@ -153,6 +153,28 @@ class ilNolejConfigGUI extends ilPluginConfigGUI
     {
         global $DIC;
 
+        $query = $DIC->http()->wrapper()->query();
+        $ref_id = $query->has("ref_id")
+            ? $query->retrieve("ref_id", $DIC->refinery()->kindlyTo()->int())
+            : 0;
+        if (!$DIC->access()->checkAccess("write", "", $ref_id)) {
+            $DIC->ui()->mainTemplate()->setOnScreenMessage(
+                "failure",
+                $this->lng->txt("permission_denied"),
+                true
+            );
+            $this->ctrl->redirect($this, self::CMD_CONFIGURE);
+        }
+
+        if (!ilNolejPlugin::hasValidRequestToken()) {
+            $DIC->ui()->mainTemplate()->setOnScreenMessage(
+                "failure",
+                $this->plugin->txt("err_invalid_token"),
+                true
+            );
+            $this->ctrl->redirect($this, self::CMD_CONFIGURE);
+        }
+
         $form = $this->initConfigurationForm();
 
         // Check form input.
@@ -163,14 +185,22 @@ class ilNolejConfigGUI extends ilPluginConfigGUI
             return;
         }
 
+        $settings = new ilNolejSettings();
+
         // Save API Key.
         $api_key = $form->getInput("api_key");
         if (!empty($api_key) && $api_key != self::SECRET) {
-            $this->plugin->saveConfig("api_key", $api_key);
+            $settings->setApiKey($api_key);
         }
 
         // Save interval.
-        $this->plugin->saveConfig("interval", $form->getInput("interval"));
+        $settings->setInterval((int) $form->getInput("interval"));
+
+        $DIC->ui()->mainTemplate()->setOnScreenMessage(
+            "success",
+            $this->lng->txt("saved_successfully"),
+            true
+        );
 
         $this->ctrl->redirect($this, self::CMD_CONFIGURE);
     }

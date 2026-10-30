@@ -23,8 +23,8 @@ class ilNolejFormGUI
     /** @var string */
     public const CMD_SAVE = "saveForm";
 
-    /** @var ilCtrl */
-    protected ilCtrl $ctrl;
+    /** @var ilCtrlInterface */
+    protected ilCtrlInterface $ctrl;
 
     /** @var ilLanguage */
     protected ilLanguage $lng;
@@ -93,13 +93,30 @@ class ilNolejFormGUI
 
         switch ($cmd) {
             case self::CMD_SHOW:
+                $this->showForm();
+                break;
+
             case self::CMD_SAVE:
-                $this->$cmd();
+                $this->saveWithToken();
                 break;
 
             default:
                 throw new ilException("Unknown command: '$cmd'");
         }
+    }
+
+    /**
+     * Save the form only if the request carries a valid CSRF token.
+     * @return void
+     */
+    protected function saveWithToken(): void
+    {
+        if (!ilNolejPlugin::hasValidRequestToken()) {
+            $this->tpl->setOnScreenMessage("failure", $this->plugin->txt("err_invalid_token"), true);
+            $this->ctrl->redirect($this, self::CMD_SHOW);
+        }
+
+        $this->saveForm();
     }
 
     /**
@@ -138,6 +155,20 @@ class ilNolejFormGUI
     {
         $body = $this->request->getParsedBody();
         return is_array($body) ? $body : [];
+    }
+
+    /**
+     * Show a failure message. The text may come from an external
+     * service, so it is escaped.
+     * @param string $message
+     * @return void
+     */
+    protected function showFailure(string $message): void
+    {
+        $this->tpl->setOnScreenMessage(
+            "failure",
+            nl2br(htmlspecialchars($message, ENT_QUOTES, "UTF-8"))
+        );
     }
 
     /**

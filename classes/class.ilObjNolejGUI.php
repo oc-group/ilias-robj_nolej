@@ -16,9 +16,11 @@ use ILIAS\GlobalScreen\Scope\MainMenu\Collector\Renderer\Hasher;
 use ILIAS\UI\Component\Listing\Workflow\Step;
 
 /**
- * @ilCtrl_isCalledBy ilObjNolejGUI: ilRepositoryGUI, ilAdministrationGUI, ilObjPluginDispatchGUI
+ * @ilCtrl_isCalledBy ilObjNolejGUI: ilRepositoryGUI, ilAdministrationGUI
+ * @ilCtrl_isCalledBy ilObjNolejGUI: ilObjPluginDispatchGUI
  * @ilCtrl_Calls ilObjNolejGUI: ilLearningProgressGUI
- * @ilCtrl_Calls ilObjNolejGUI: ilPermissionGUI, ilInfoScreenGUI, ilObjectCopyGUI, ilCommonActionDispatcherGUI
+ * @ilCtrl_Calls ilObjNolejGUI: ilPermissionGUI, ilInfoScreenGUI
+ * @ilCtrl_Calls ilObjNolejGUI: ilObjectCopyGUI, ilCommonActionDispatcherGUI
  * @ilCtrl_Calls ilObjNolejGUI: ilNolejManagerGUI
  */
 class ilObjNolejGUI extends ilObjectPluginGUI
@@ -61,9 +63,6 @@ class ilObjNolejGUI extends ilObjectPluginGUI
     /** @var string */
     public const PROP_ONLINE = "online";
 
-    /** @var ilCtrl */
-    protected ilCtrl $ctrl;
-
     /** @var ilTabsGUI */
     protected ilTabsGUI $tabs;
 
@@ -88,7 +87,8 @@ class ilObjNolejGUI extends ilObjectPluginGUI
 
     /**
      * Get the current object as a Nolej object.
-     * @throws LogicException if there is no Nolej object (e.g. in creation mode).
+     * @throws LogicException if there is no Nolej object (e.g. in creation
+     *   mode).
      * @return ilObjNolej
      */
     public function getNolejObject(): ilObjNolej
@@ -138,6 +138,16 @@ class ilObjNolejGUI extends ilObjectPluginGUI
                     case self::CMD_CONTENT_EDIT:
                         // Needs write permission.
                         $this->checkPermission("write");
+
+                        if ($cmd === self::CMD_PROPERTIES_SAVE && !ilNolejPlugin::hasValidRequestToken()) {
+                            $this->tpl->setOnScreenMessage(
+                                "failure",
+                                $this->plugin->txt("err_invalid_token"),
+                                true
+                            );
+                            $this->ctrl->redirect($this, self::CMD_PROPERTIES_EDIT);
+                        }
+
                         $this->$cmd();
                         break;
 
@@ -226,13 +236,6 @@ class ilObjNolejGUI extends ilObjectPluginGUI
                 $this->txt("tab_" . self::TAB_PROPERTIES),
                 $this->ctrl->getLinkTarget($this, self::CMD_PROPERTIES_EDIT)
             );
-
-            // LP tab.
-            // $this->tabs->addTab(
-            //     "learning_progress",
-            //     $this->lng->txt("learning_progress"),
-            //     $this->ctrl->getLinkTargetByClass(ilLearningProgressGUI::class)
-            // );
         }
 
         // Standard permission tab.
@@ -283,16 +286,22 @@ class ilObjNolejGUI extends ilObjectPluginGUI
     {
         $info->addSection($this->plugin->txt("plugin_title"));
 
+        // The document ID and the sync button are for editors only.
+        $can_write = $this->getNolejObject()->hasWritePermission();
+
         // Document ID.
-        $info->addProperty(
-            $this->plugin->txt("document_id"),
-            $this->getNolejObject()->getDocumentId()
-        );
+        if ($can_write) {
+            $info->addProperty(
+                $this->plugin->txt("document_id"),
+                $this->getNolejObject()->getDocumentId()
+            );
+        }
 
         // Status.
         $info->addProperty(
             $this->lng->txt("status"),
-            $this->getNolejObject()->getDocumentStatusInfo() . $this->lastWebhookCallModal()
+            $this->getNolejObject()->getDocumentStatusInfo()
+                . ($can_write ? $this->lastWebhookCallModal() : "")
         );
     }
 
@@ -331,7 +340,8 @@ class ilObjNolejGUI extends ilObjectPluginGUI
     }
 
     /**
-     * Edit Properties. This commands uses the form class to display an input form.
+     * Edit Properties. This commands uses the form class to display an input
+     * form.
      * @return void
      */
     protected function editProperties(): void
@@ -425,9 +435,9 @@ class ilObjNolejGUI extends ilObjectPluginGUI
         $steps = [];
         $indexes = [];
 
-        $i = 0;
+        $step_index = 0;
         while ($row = $db->fetchAssoc($result)) {
-            if ($i == 0) {
+            if ($step_index == 0) {
                 $this->selectedType = $row["type"];
             }
 
@@ -440,7 +450,7 @@ class ilObjNolejGUI extends ilObjectPluginGUI
                 ->withAvailability(Step::AVAILABLE)
                 ->withStatus(Step::IN_PROGRESS);
 
-            $indexes[$row["type"]] = $i++;
+            $indexes[$row["type"]] = $step_index++;
         }
 
         $selector = $workflow->linear($this->txt("tab_activities"), $steps);
@@ -526,12 +536,14 @@ class ilObjNolejGUI extends ilObjectPluginGUI
      */
     public static function _goto(array $a_target): void
     {
+        global $DIC;
+
         $target = $a_target[0];
 
         if ($target == "webhook") {
             $webhook = new ilNolejWebhook();
             $webhook->parse();
-            exit;
+            $DIC->http()->close();
         }
 
         parent::_goto($a_target);

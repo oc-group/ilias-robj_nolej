@@ -21,6 +21,7 @@ activities_cw_words#:#Definiert, wie viele Wörter in der Kreuzworträtselaktivi
 activities_dragtheword#:#Ziehen Sie das Wort
 activities_dtw_words#:#Definiert, wie viele Wörter in der Ziehen Sie das Wort-Aktivität verwendet werden sollen
 activities_findtheword#:#Finde das Wort
+activities_flashcards#:#Lernkarten
 activities_flashcards_flashcards#:#Definiert, wie viele Karten in der konzeptionellen Bewertungsaktivität erscheinen sollen
 activities_ftw_words#:#Definiert, wie viele Wörter in der Aktivität „Wortsuche“ verwendet werden sollen
 activities_generation_start#:#Ausgewählte Aktivitäten werden generiert; Sie erhalten eine Benachrichtigung, wenn sie fertig sind. Es kann bis zu 1 Minute dauern.
@@ -88,8 +89,10 @@ document_id#:#Document ID
 edit_h5p#:#Edit H5P
 err_access_denied#:#Sie können nicht auf diesen Kurs zugreifen.
 err_activities_get#:#Einige der generierten Aktivitäten können nicht abgerufen werden: %s. Bitte versuchen Sie erneut, die Aktivitäten zu generieren.
+err_activity_not_found#:#Aktivität nicht gefunden.
 err_analysis_not_ready#:#Die Analyse ist noch nicht fertig, bitte warten Sie und überprüfen Sie es erneut.
 err_api_key_missing#:#API-Schlüssel fehlt! Speichern Sie es und versuchen Sie es erneut.
+err_api_unreachable#:#Der Nolej-Dienst ist nicht erreichbar. Bitte versuchen Sie es später erneut.
 err_concepts_file#:#Concepts-Datei kann nicht aufgerufen werden. Bitte versuchen Sie es erneut.
 err_concepts_put#:#NOLEJ hat einen Fehler zurückgegeben. Bitte überprüfen Sie Ihre Daten und versuchen Sie es erneut.
 err_concepts_save#:#Concepts-Datei kann nicht auf der Festplatte gespeichert werden. Versuchen Sie es erneut. Wenn das Problem weiterhin besteht, bitten Sie einen Administrator um Hilfe.
@@ -103,8 +106,10 @@ err_h5p_not_active#:#Das H5P-Plugin ist nicht aktiv. Bitte wenden Sie sich an ei
 err_h5p_not_installed#:#Das H5P-Plugin ist nicht installiert. Bitte wenden Sie sich an einen Administrator.
 err_h5p_package#:#kein gültiges H5P-Paket
 err_h5p_plugin#:#Leider wird Ihre Version des H5P-Plugins nicht unterstützt. Bitte aktualisieren Sie es oder wenden Sie sich an einen Administrator.
+err_invalid_token#:#Die Anfrage konnte nicht überprüft werden (ungültiges oder fehlendes Sicherheits-Token). Bitte versuchen Sie es erneut.
 err_json_decode#:#JSON kann nicht dekodiert werden
-err_media_format_unknown#:#Format not supported.
+err_media_format_unknown#:#Format nicht unterstützt.
+err_media_url_empty#:#Die Quell-URL ist leer.
 err_questions_file#:#Fragendatei kann nicht abgerufen werden. Bitte versuche Sie es erneut.
 err_questions_put#:#NOLEJ hat einen Fehler zurückgegeben. Bitte überprüfen Sie Ihre Daten und versuchen Sie es erneut.
 err_questions_save#:#Fragendatei kann nicht auf der Festplatte gespeichert werden. Versuchen Sie es erneut. Wenn das Problem weiterhin besteht, bitten Sie einen Administrator um Hilfe.
@@ -115,7 +120,12 @@ err_settings_save#:#Die Datei mit den Aktivitätseinstellungen kann nicht auf de
 err_summary_file#:#Zusammenfassungsdatei kann nicht abgerufen werden. Bitte versuche Sie es erneut.
 err_summary_put#:#NOLEJ hat einen Fehler zurückgegeben. Bitte überprüfen Sie Ihre Daten und versuchen Sie es erneut.
 err_summary_save#:#Zusammenfassungsdatei kann nicht auf der Festplatte gespeichert werden. Versuchen Sie es erneut. Wenn das Problem weiterhin besteht, bitten Sie einen Administrator um Hilfe.
+err_transcription_download#:#Die Transkription kann nicht heruntergeladen werden
+err_transcription_get#:#Die Transkription kann nicht abgerufen werden
+err_transcription_missing#:#Titel und Transkription dürfen nicht leer sein.
 err_transcription_not_ready#:#Die Transkription ist noch nicht fertig, bitte warten Sie und überprüfen Sie es erneut. Es sollte ein Zehntel der Quelldauer dauern; wenn Sie nach Ablauf dieser Zeit keine Benachrichtigung erhalten haben, wenden Sie sich bitte an einen Administrator.
+err_url_userinfo#:#Die URL darf weder einen Benutzernamen noch ein Passwort enthalten. Entfernen Sie diese und versuchen Sie es erneut.
+err_webhook_call#:#Die letzte Antwort von Nolej kann nicht abgerufen werden. Bitte versuchen Sie es später erneut.
 fold_create_xnlj#:#NOLEJ-Objekt erstellen
 goto_activity_management#:#Gehen Sie zur Aktivitätsverwaltung
 grp_create_xnlj#:#NOLEJ-Objekt erstellen

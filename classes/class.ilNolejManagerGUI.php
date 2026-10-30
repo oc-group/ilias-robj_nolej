@@ -20,11 +20,13 @@ use ILIAS\UI\Component\Listing\Workflow\Step;
  * @ilCtrl_isCalledBy ilNolejManagerGUI: ilObjPluginDispatchGUI, ilObjNolejGUI
  * @ilCtrl_Calls ilNolejManagerGUI: ilNolejCreationFormGUI
  * @ilCtrl_Calls ilNolejManagerGUI: ilNolejTranscriptionFormGUI
- * @ilCtrl_Calls ilNolejManagerGUI: ilNolejConceptsFormGUI, ilNolejQuestionsFormGUI, ilNolejSummaryFormGUI
+ * @ilCtrl_Calls ilNolejManagerGUI: ilNolejConceptsFormGUI
+ * @ilCtrl_Calls ilNolejManagerGUI: ilNolejQuestionsFormGUI
+ * @ilCtrl_Calls ilNolejManagerGUI: ilNolejSummaryFormGUI
  * @ilCtrl_Calls ilNolejManagerGUI: ilNolejActivitiesFormGUI
  * @ilCtrl_Calls ilNolejManagerGUI: ilNolejH5PIntegrationGUI
  */
-class ilNolejManagerGUI
+class ilNolejManagerGUI implements ilCtrlSecurityInterface
 {
     /** @var string */
     public const CMD_CHECK_UPDATES = "checkUpdates";
@@ -65,8 +67,8 @@ class ilNolejManagerGUI
     /** @var int */
     public const MAX_ATTEMPTS = 3;
 
-    /** @var ilCtrl */
-    protected ilCtrl $ctrl;
+    /** @var ilCtrlInterface */
+    protected ilCtrlInterface $ctrl;
 
     /** @var ilTabsGUI */
     protected ilTabsGUI $tabs;
@@ -118,6 +120,23 @@ class ilNolejManagerGUI
         $this->documentId = $this->obj_gui->getNolejObject()->getDocumentId();
         $this->dataDir = $this->obj_gui->getNolejObject()->getDataDir();
         $this->statusCheck();
+    }
+
+    /**
+     * The webhook call changes the state: it is a CSRF protected GET.
+     * @return string[]
+     */
+    public function getUnsafeGetCommands(): array
+    {
+        return [self::CMD_WEBHOOK_CALL];
+    }
+
+    /**
+     * @return string[]
+     */
+    public function getSafePostCommands(): array
+    {
+        return [];
     }
 
     /**
@@ -283,6 +302,11 @@ class ilNolejManagerGUI
      */
     protected function webhookCall(): void
     {
+        if (!ilNolejPlugin::hasValidRequestToken()) {
+            $this->tpl->setOnScreenMessage("failure", $this->plugin->txt("err_invalid_token"), true);
+            $this->ctrl->redirectByClass($this->defaultClass, ilNolejFormGUI::CMD_SHOW);
+        }
+
         if (!$this->isStatusPending($this->status)) {
             $this->ctrl->redirectByClass($this->defaultClass, ilNolejFormGUI::CMD_SHOW);
         }
@@ -296,6 +320,10 @@ class ilNolejManagerGUI
         );
 
         $data = json_decode($result, true);
+        if (!$api->lastRequestSucceeded() || !is_array($data)) {
+            $this->tpl->setOnScreenMessage("failure", $this->plugin->txt("err_webhook_call"), true);
+            $this->ctrl->redirectByClass($this->defaultClass, ilNolejFormGUI::CMD_SHOW);
+        }
 
         $webhook = new ilNolejWebhook();
         $webhook->parse($data);
@@ -312,16 +340,15 @@ class ilNolejManagerGUI
 
         $workflow = $DIC->ui()->factory()->listing()->workflow();
 
-        $this->tpl->addCss(ilNolejPlugin::PLUGIN_DIR . "/css/nolej.css");
+        $this->tpl->addCss($this->plugin->getRelativeDirectory() . "/css/nolej.css");
 
         if ($this->isStatusPending($this->status)) {
-            $this->tpl->addJavaScript(ilNolejPlugin::PLUGIN_DIR . "/js/updates.js");
-            $interval = (int) $this->plugin->getConfig("interval", "1");
+            $this->tpl->addJavaScript($this->plugin->getRelativeDirectory() . "/js/updates.js");
+            $interval = (new ilNolejSettings())->getInterval();
 
             $this->ctrl->setParameter($this->obj_gui, "ref_id", $this->obj_gui->getNolejObject()->getRefId());
             $redirectToUrl = $this->ctrl->getLinkTarget($this->status == self::STATUS_ACTIVITIES_PENDING ? $this->obj_gui : $this);
 
-            $this->ctrl->setParameter($this, "document_id", $this->documentId);
             $this->ctrl->setParameter($this, "status", $this->status);
             $updateUrl = $this->ctrl->getLinkTarget($this, self::CMD_CHECK_UPDATES);
 
@@ -392,7 +419,8 @@ class ilNolejManagerGUI
      * Build a step of the workflow.
      * @param \ILIAS\UI\Component\Listing\Workflow\Factory $workflow
      * @param string $labelKey language key of the label
-     * @param string $pendingKey language key of the pending text, empty if not pending
+     * @param string $pendingKey language key of the pending text, empty if not
+     *   pending
      * @param string $formClass class of the form GUI the step links to
      * @param string $formCmd command of the form GUI the step links to
      * @param int $availability
@@ -435,7 +463,8 @@ class ilNolejManagerGUI
     }
 
     /**
-     * Availability of the review steps (concepts, questions, summary, activities).
+     * Availability of the review steps (concepts, questions, summary,
+     * activities).
      * @return int
      */
     protected function getReviewStepAvailability(): int
@@ -464,39 +493,55 @@ class ilNolejManagerGUI
 
     /**
      * Check for document updates; called via ajax request.
-     * Requires in GET the document ID and the status to be checked.
+     * Requires in GET the status to be checked, and compares it with the
+     * status of the current document.
      *
-     * Prints "reload" if there is an update; prints nothing otherwise.
+     * Replies "update" if there is an update; replies nothing otherwise.
      */
     protected function checkUpdates(): void
     {
-        // Required params.
-        if (!isset($_GET["document_id"], $_GET["status"])) {
-            exit(0);
+        global $DIC;
+
+        $query = $DIC->http()->wrapper()->query();
+        if (!$query->has("status")) {
+            $this->replyPlainText("");
+            return;
         }
 
-        $documentId = $_GET["document_id"];
-        $currentStatus = $_GET["status"];
+        $currentStatus = $query->retrieve("status", $DIC->refinery()->kindlyTo()->int());
 
         // Fetch document data.
         $set = $this->db->queryF(
             "SELECT status FROM " . ilNolejPlugin::TABLE_DOC . " WHERE document_id = %s;",
             ["text"],
-            [$documentId]
+            [$this->documentId]
         );
 
         $row = $this->db->fetchAssoc($set);
         if (!$row) {
             // Document not found.
-            exit(0);
+            $this->replyPlainText("");
+            return;
         }
 
-        if ($row["status"] != $currentStatus) {
-            // Document updated.
-            echo "update";
-        }
+        // Document updated if the status differs.
+        $this->replyPlainText((int) $row["status"] != $currentStatus ? "update" : "");
+    }
 
-        exit(0);
+    /**
+     * Send a plain text response and stop.
+     * @param string $body
+     * @return void
+     */
+    protected function replyPlainText(string $body): void
+    {
+        global $DIC;
+
+        $response = $DIC->http()->response()
+            ->withHeader("Content-Type", "text/plain; charset=UTF-8")
+            ->withBody(\ILIAS\Filesystem\Stream\Streams::ofString($body));
+        $DIC->http()->saveResponse($response);
+        $DIC->http()->close();
     }
 
     /**
@@ -581,6 +626,11 @@ class ilNolejManagerGUI
             false
         );
 
+        // Do not keep an error response as the content of a file.
+        if (!$api->lastRequestSucceeded() || $result === "") {
+            return false;
+        }
+
         return $saveAs == null
             ? $result
             : $this->writeDocumentFile($saveAs, $result);
@@ -633,7 +683,7 @@ class ilNolejManagerGUI
      */
     public function downloadActivities(): string
     {
-        if (!ilNolejH5PIntegrationGUI::isH5PInstalled()) {
+        if (!ilNolejH5PDependency::isInstalled()) {
             return $this->plugin->txt("err_h5p_not_installed");
         }
 
@@ -668,12 +718,26 @@ class ilNolejManagerGUI
         $errorMessages = [];
 
         $now = time();
+        $api = new ilNolejAPI();
         foreach ($activities->activities as $activity) {
-            $path = "{$h5pDir}/{$activity->activity_name}.h5p";
+            if (!$api->isValidActivity($activity)) {
+                $errorMessages[] = "? (" . $this->plugin->txt("err_h5p_package") . ")";
+                continue;
+            }
 
-            $errorMessage = $this->downloadAndImportH5PContent($path, $activity->url, $h5pDir, $activity->activity_name, $now, self::MAX_ATTEMPTS);
+            $name = $api->getActivityField($activity, "activity_name");
+            $path = "{$h5pDir}/{$name}.h5p";
+
+            $errorMessage = $this->downloadAndImportH5PContent(
+                $path,
+                $api->getActivityField($activity, "url"),
+                $h5pDir,
+                $name,
+                $now,
+                self::MAX_ATTEMPTS
+            );
             if (!empty($errorMessage)) {
-                $errorMessages[] = "{$activity->activity_name} ({$errorMessage})";
+                $errorMessages[] = "{$name} ({$errorMessage})";
             }
         }
 
@@ -701,12 +765,10 @@ class ilNolejManagerGUI
         $attemptsLeft -= 1;
 
         // Download activity.
-        file_put_contents(
-            $path,
-            (string) file_get_contents($url)
-        );
-
-        $errorMessage = $this->importH5PContent($h5pDir, $type, $time);
+        $api = new ilNolejAPI();
+        $errorMessage = $api->downloadUrlToFile($url, $path)
+            ? $this->importH5PContent($h5pDir, $type, $time)
+            : $this->plugin->txt("err_h5p_package");
         if (!empty($errorMessage)) {
             return $attemptsLeft == 0
                 ? $errorMessage
@@ -728,7 +790,7 @@ class ilNolejManagerGUI
 
         $filepath = "{$h5pDir}/{$type}.h5p";
 
-        if (!ilNolejH5PIntegrationGUI::isH5PInstalled()) {
+        if (!ilNolejH5PDependency::isInstalled()) {
             return $this->plugin->txt("err_h5p_not_installed");
         }
 

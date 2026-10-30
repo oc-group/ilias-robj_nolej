@@ -15,7 +15,8 @@ declare(strict_types=1);
 /**
  * Summary Form GUI class.
  *
- * @ilCtrl_isCalledBy ilNolejSummaryFormGUI: ilObjPluginDispatchGUI, ilObjNolejGUI, ilNolejManagerGUI
+ * @ilCtrl_isCalledBy ilNolejSummaryFormGUI: ilObjPluginDispatchGUI
+ * @ilCtrl_isCalledBy ilNolejSummaryFormGUI: ilObjNolejGUI, ilNolejManagerGUI
  */
 class ilNolejSummaryFormGUI extends ilNolejFormGUI
 {
