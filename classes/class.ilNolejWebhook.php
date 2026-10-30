@@ -123,6 +123,7 @@ class ilNolejWebhook
             ->withHeader("Content-Type", "application/json; charset=UTF-8")
             ->withBody(\ILIAS\Filesystem\Stream\Streams::ofString($body));
         $DIC->http()->saveResponse($response);
+        $DIC->http()->sendResponse();
         $DIC->http()->close();
 
         return true;

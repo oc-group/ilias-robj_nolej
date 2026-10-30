@@ -541,6 +541,7 @@ class ilNolejManagerGUI implements ilCtrlSecurityInterface
             ->withHeader("Content-Type", "text/plain; charset=UTF-8")
             ->withBody(\ILIAS\Filesystem\Stream\Streams::ofString($body));
         $DIC->http()->saveResponse($response);
+        $DIC->http()->sendResponse();
         $DIC->http()->close();
     }
 

@@ -506,8 +506,15 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
             return false;
         }
 
-        $path = ilObjMediaObject::_lookupItemPath($mobId, false, false);
-        if (!file_exists($path)) {
+        // The file path is built like the core does (the "./public/..."
+        // path of _lookupItemPath() is wrong when the cwd is "public").
+        $location = ilMediaItem::_lookupLocationForMobId($mobId, "Standard");
+        if ($location === "" || preg_match("/https?\:/i", $location)) {
+            return false;
+        }
+
+        $path = ilObjMediaObject::_getDirectory($mobId) . "/" . $location;
+        if (!is_file($path)) {
             return false;
         }
 
