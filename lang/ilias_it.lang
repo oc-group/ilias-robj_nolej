@@ -21,6 +21,7 @@ activities_cw_words#:#Definisce quante parole utilizzare nel cruciverba
 activities_dragtheword#:#Trascina la parola
 activities_dtw_words#:#Definisce quante parole utilizzare in Trascina la parola
 activities_findtheword#:#Trova la parola
+activities_flashcards#:#Flashcard
 activities_flashcards_flashcards#:#Definisce quante flashcard dovranno apparire nel quiz concettuale
 activities_ftw_words#:#Numero di parole
 activities_generation_start#:#Le attività selezionate sono in generazione; riceverai una notifica quando saranno pronte. Può volerci fino a un minuto.
@@ -88,8 +89,10 @@ document_id#:#Document ID
 edit_h5p#:#Modifica H5P
 err_access_denied#:#Non puoi accedere a questo corso.
 err_activities_get#:#Impossibile ottenere alcune delle attività generate: %s. Riprova a generare nuovamente le attività.
+err_activity_not_found#:#Attività non trovata.
 err_analysis_not_ready#:#L'analisi non è ancora completa, attendi ancora un po' di tempo e torna qui per verificare.
 err_api_key_missing#:#Non hai indicato la tua chiave API! Vai nella configurazione del plugin e indica la tua chiave API per poter utilizzare il plugin di NOLEJ.
+err_api_unreachable#:#Il servizio Nolej non è raggiungibile. Per favore, riprova più tardi.
 err_concepts_file#:#Impossibile caricare i concetti. Per favore, riprova.
 err_concepts_put#:#NOLEJ ha restituito un errore, per favore controlla i dati e riprova.
 err_concepts_save#:#Impossibile salvare il file dei concetti. Riprova, e se persiste contatta un Amministratore.
@@ -103,8 +106,10 @@ err_h5p_not_active#:#Il plugin H5P non è attivo. Per favore, contatta un ammini
 err_h5p_not_installed#:#Il plugin H5P non è installato. Per favore, contatta un amministratore.
 err_h5p_package#:#non è un valido pacchetto H5P
 err_h5p_plugin#:#La versione del plugin H5P installata non è supportata. Per favore, aggiorna il plugin o contatta un amministratore.
+err_invalid_token#:#Impossibile verificare la richiesta (token di sicurezza non valido o mancante). Per favore, riprova.
 err_json_decode#:#non può decodificare il JSON
 err_media_format_unknown#:#Formato non supportato.
+err_media_url_empty#:#L'URL della sorgente è vuota.
 err_questions_file#:#Impossibile caricare le domande. Per favore, riprova.
 err_questions_put#:#NOLEJ ha restituito un errore, per favore controlla i dati e riprova.
 err_questions_save#:#Impossibile salvare il file delle domande. Riprova, e se persiste contatta un Amministratore.
@@ -115,7 +120,12 @@ err_settings_save#:#Impossibile salvare il file delle impostazioni delle attivit
 err_summary_file#:#Impossibile caricare il file di sommario. Per favore, riprova.
 err_summary_put#:#NOLEJ ha restituito un errore, per favore controlla i dati e riprova.
 err_summary_save#:#Impossibile salvare il file di sommario. Riprova, e se persiste contatta un Amministratore.
+err_transcription_download#:#Impossibile scaricare la trascrizione
+err_transcription_get#:#Impossibile ottenere la trascrizione
+err_transcription_missing#:#Il titolo e la trascrizione non possono essere vuoti.
 err_transcription_not_ready#:#La trascrizione non è ancora completa, attendi ancora un po' di tempo e torna qui per verificare. L'attesa stimata è di circa un decimo rispetto alla durata del file scelto; se è trascorso molto più di questo tempo e non hai ancora ricevuto una notifica, per favore contatta un Amministratore.
+err_url_userinfo#:#L'URL non deve contenere né nome utente né password. Rimuovili e riprova.
+err_webhook_call#:#Impossibile ottenere l'ultima risposta di Nolej. Per favore, riprova più tardi.
 fold_create_xnlj#:#Crea un oggetto NOLEJ
 goto_activity_management#:#Vai in Gestione Attività
 grp_create_xnlj#:#Crea un oggetto NOLEJ

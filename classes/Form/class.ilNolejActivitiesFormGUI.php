@@ -15,7 +15,8 @@ declare(strict_types=1);
 /**
  * Activities settings Form GUI class.
  *
- * @ilCtrl_isCalledBy ilNolejActivitiesFormGUI: ilObjPluginDispatchGUI, ilObjNolejGUI, ilNolejManagerGUI
+ * @ilCtrl_isCalledBy ilNolejActivitiesFormGUI: ilObjPluginDispatchGUI
+ * @ilCtrl_isCalledBy ilNolejActivitiesFormGUI: ilObjNolejGUI, ilNolejManagerGUI
  */
 class ilNolejActivitiesFormGUI extends ilNolejFormGUI
 {

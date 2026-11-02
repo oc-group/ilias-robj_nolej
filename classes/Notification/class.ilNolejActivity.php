@@ -225,9 +225,7 @@ class ilNolejActivity
         return $obj->stored;
     }
 
-    //
-    // setter/getter
-    //
+    // Setters and getters.
 
     /**
      * @param string $a_value
@@ -319,7 +317,8 @@ class ilNolejActivity
      */
     public function withErrorMessage($a_error_message): self
     {
-        $this->error_message = $a_error_message;
+        // The column is varchar(200).
+        $this->error_message = mb_substr((string) $a_error_message, 0, 200);
         return $this;
     }
 

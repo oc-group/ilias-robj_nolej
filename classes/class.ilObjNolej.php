@@ -83,6 +83,28 @@ class ilObjNolej extends ilObjectPlugin implements ilLPStatusPluginInterface
      */
     public function doDelete(): void
     {
+        // Remove the data of the document, too.
+        $document_id = $this->getDocumentId();
+        if ($document_id !== "" && preg_match('/^[A-Za-z0-9_-]+$/', $document_id) === 1) {
+            $tables = [
+                ilNolejPlugin::TABLE_H5P,
+                ilNolejPlugin::TABLE_LP,
+                ilNolejPlugin::TABLE_ACTIVITY,
+                ilNolejPlugin::TABLE_DOC,
+            ];
+            foreach ($tables as $table) {
+                $this->db->manipulateF(
+                    "DELETE FROM " . $table . " WHERE document_id = %s;",
+                    ["text"],
+                    [$document_id]
+                );
+            }
+
+            if (is_dir($this->getDataDir())) {
+                ilFileUtils::delDir($this->getDataDir());
+            }
+        }
+
         $this->db->manipulateF(
             "DELETE FROM " . ilNolejPlugin::TABLE_DATA . " WHERE id = %s;",
             ["integer"],
@@ -147,7 +169,7 @@ class ilObjNolej extends ilObjectPlugin implements ilLPStatusPluginInterface
         );
 
         $row = $this->db->fetchAssoc($result);
-        return (string) $row[$name];
+        return (string) ($row[$name] ?? "");
     }
 
     /**

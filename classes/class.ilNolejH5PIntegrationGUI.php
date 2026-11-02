@@ -23,7 +23,8 @@ use srag\Plugins\H5P\TemplateHelper;
 
 /**
  * H5P integration class.
- * @ilCtrl_isCalledBy ilNolejH5PIntegrationGUI: ilObjPluginDispatchGUI, ilObjNolejGUI
+ * @ilCtrl_isCalledBy ilNolejH5PIntegrationGUI: ilObjPluginDispatchGUI
+ * @ilCtrl_isCalledBy ilNolejH5PIntegrationGUI: ilObjNolejGUI
  */
 class ilNolejH5PIntegrationGUI
 {
@@ -31,20 +32,14 @@ class ilNolejH5PIntegrationGUI
     use TemplateHelper;
     use ilH5PRequestObject;
 
-    /** @var string */
-    protected const H5P_PLUGIN_DIR = "./Customizing/global/plugins/Services/Repository/RepositoryObject/H5P";
-
-    /** @var string */
-    protected const H5P_AUTOLOADER = self::H5P_PLUGIN_DIR . "/vendor/autoload.php";
-
     /** @var string edit h5p activity */
     public const CMD_EDIT = "edit";
 
     /** @var string update h5p activity */
     public const CMD_UPDATE = "update";
 
-    /** @var ilCtrl */
-    protected ilCtrl $ctrl;
+    /** @var ilCtrlInterface */
+    protected ilCtrlInterface $ctrl;
 
     /** @var ilGlobalTemplateInterface */
     protected ilGlobalTemplateInterface $tpl;
@@ -129,6 +124,15 @@ class ilNolejH5PIntegrationGUI
         switch ($cmd) {
             case self::CMD_EDIT:
             case self::CMD_UPDATE:
+                if ($cmd === self::CMD_UPDATE && !ilNolejPlugin::hasValidRequestToken()) {
+                    $this->tpl->setOnScreenMessage(
+                        "failure",
+                        $this->plugin->txt("err_invalid_token"),
+                        true
+                    );
+                    $this->ctrl->redirect($this->obj_gui, ilObjNolejGUI::CMD_CONTENT_SHOW);
+                }
+
                 $content = $this->getContentByRequest();
                 if (null === $content) {
                     $this->tpl->setContent(
@@ -140,7 +144,7 @@ class ilNolejH5PIntegrationGUI
                 }
 
                 // Needed for ajax loader.
-                $this->ctrl->setParameterByClass(ilH5PAjaxEndpointGUI::class, "ref_id", $_GET["ref_id"]);
+                $this->ctrl->setParameterByClass(ilH5PAjaxEndpointGUI::class, "ref_id", (string) $this->getRequestedRefId());
 
                 $this->$cmd($content);
                 break;
@@ -159,7 +163,7 @@ class ilNolejH5PIntegrationGUI
         global $DIC;
         $DIC->tabs()->clearTargets();
 
-        $this->ctrl->setParameter($this->obj_gui, "type", $_GET["type"]);
+        $this->ctrl->setParameter($this->obj_gui, "type", $this->getRequestedType());
         $DIC->tabs()->setBackTarget(
             $this->lng->txt("back"),
             $this->ctrl->getLinkTarget($this->obj_gui, ilObjNolejGUI::CMD_CONTENT_SHOW)
@@ -172,9 +176,7 @@ class ilNolejH5PIntegrationGUI
      */
     public static function getH5PPlugin(): ilH5PPlugin
     {
-        global $DIC;
-        $component_factory = $DIC["component.factory"];
-        return $component_factory->getPlugin(ilH5PPlugin::PLUGIN_ID);
+        return ilNolejH5PDependency::getPlugin();
     }
 
     /**
@@ -183,17 +185,7 @@ class ilNolejH5PIntegrationGUI
      */
     public static function isH5PInstalled(): bool
     {
-        if (!file_exists(self::H5P_AUTOLOADER)) {
-            return false;
-        }
-
-        require_once self::H5P_AUTOLOADER;
-
-        $h5p_plugin = self::getH5PPlugin();
-        $h5p_container = $h5p_plugin->getContainer();
-        $repositories = $h5p_container->getRepositoryFactory();
-
-        return $repositories->general()->isMainPluginInstalled();
+        return ilNolejH5PDependency::isInstalled();
     }
 
     /**
@@ -202,8 +194,7 @@ class ilNolejH5PIntegrationGUI
      */
     public static function isH5PActive(): bool
     {
-        $h5p_plugin = self::getH5PPlugin();
-        return $h5p_plugin->isActive();
+        return ilNolejH5PDependency::isActive();
     }
 
     /**
@@ -214,7 +205,10 @@ class ilNolejH5PIntegrationGUI
     {
         global $DIC;
 
-        return $DIC->http()->wrapper()->query()->retrieve("ref_id", $DIC->refinery()->kindlyTo()->int());
+        $query = $DIC->http()->wrapper()->query();
+        return $query->has("ref_id")
+            ? $query->retrieve("ref_id", $DIC->refinery()->kindlyTo()->int())
+            : 0;
     }
 
     /**
@@ -225,7 +219,10 @@ class ilNolejH5PIntegrationGUI
     {
         global $DIC;
 
-        return $DIC->http()->wrapper()->query()->retrieve("type", $DIC->refinery()->kindlyTo()->string());
+        $query = $DIC->http()->wrapper()->query();
+        return $query->has("type")
+            ? $query->retrieve("type", $DIC->refinery()->kindlyTo()->string())
+            : "";
     }
 
     /**
@@ -234,7 +231,10 @@ class ilNolejH5PIntegrationGUI
      */
     protected function getContentByRequest(): ?IContent
     {
-        if (!isset($_GET["ref_id"], $_GET["type"])) {
+        global $DIC;
+
+        $query = $DIC->http()->wrapper()->query();
+        if (!$query->has("ref_id") || !$query->has("type")) {
             return null;
         }
 
@@ -261,7 +261,7 @@ class ilNolejH5PIntegrationGUI
      */
     public function getHTML(int $contentId, string $type = "", bool $editable = false): string
     {
-        $this->tpl->addCss(ilNolejPlugin::PLUGIN_DIR . "/css/nolej.css");
+        $this->tpl->addCss($this->plugin->getRelativeDirectory() . "/css/nolej.css");
 
         // Check H5P plugin is active.
         if (!self::isH5PActive()) {
@@ -287,7 +287,7 @@ class ilNolejH5PIntegrationGUI
 
         if ($editable) {
             $this->ctrl->setParameter($this, "type", $type);
-            $this->ctrl->setParameter($this, "ref_id", $_GET["ref_id"]);
+            $this->ctrl->setParameter($this, "ref_id", (string) $this->getRequestedRefId());
             $this->toolbar->addComponent(
                 $this->factory->button()->standard(
                     $this->plugin->txt("edit_h5p"),
@@ -341,7 +341,8 @@ class ilNolejH5PIntegrationGUI
         $metadata["obj_id"] = $this->obj_gui->getObject()->getId();
         $metadata["parent_type"] = ilNolejPlugin::PLUGIN_ID;
 
-        // The kernel documents the first parameter of savePackage() as null, but it takes the content.
+        // The kernel documents the first parameter as null, but it takes
+        // the content.
         /** @psalm-suppress InvalidArgument */
         // @phpstan-ignore argument.type
         $h5p_storage->savePackage([
@@ -380,9 +381,9 @@ class ilNolejH5PIntegrationGUI
     }
 
     /**
-     * Executes the given form processor and registers an additional post-processor,
-     * which calles either $this->createElement() or $this->updateElement() depending
-     * on the given content.
+     * Executes the given form processor and registers an additional
+     * post-processor, which calls either $this->createElement() or
+     * $this->updateElement() depending on the given content.
      * @param IPostProcessorAware $form_processor
      * @param IContent $content
      * @return void

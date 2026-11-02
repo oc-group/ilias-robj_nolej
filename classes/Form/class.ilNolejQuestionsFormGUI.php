@@ -18,7 +18,8 @@ use Nolej\ilTextAreaInputGUI;
 /**
  * Questions Form GUI class.
  *
- * @ilCtrl_isCalledBy ilNolejQuestionsFormGUI: ilObjPluginDispatchGUI, ilObjNolejGUI, ilNolejManagerGUI
+ * @ilCtrl_isCalledBy ilNolejQuestionsFormGUI: ilObjPluginDispatchGUI
+ * @ilCtrl_isCalledBy ilNolejQuestionsFormGUI: ilObjNolejGUI, ilNolejManagerGUI
  */
 class ilNolejQuestionsFormGUI extends ilNolejFormGUI
 {
@@ -113,7 +114,8 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
      * Read the i-th question from the (checked) form.
      * @param ilPropertyFormGUI $form
      * @param int $i index of the question
-     * @return array<string, mixed>|null null if the question is not in the form.
+     * @return array<string, mixed>|null null if the question is not in the
+     *   form.
      */
     protected function readQuestion(ilPropertyFormGUI $form, int $i): ?array
     {
@@ -173,6 +175,8 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
      */
     protected function form($usePost = false): ilPropertyFormGUI
     {
+        global $DIC;
+
         $form = new ilPropertyFormGUI();
         $form->setTitle($this->plugin->txt("review_questions"));
 
@@ -184,7 +188,10 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
             return $form;
         }
 
-        $questionTypeFilter = $_GET["filter_type"] ?? "";
+        $query = $DIC->http()->wrapper()->query();
+        $questionTypeFilter = $query->has("filter_type")
+            ? $query->retrieve("filter_type", $DIC->refinery()->kindlyTo()->string())
+            : "";
         $questionTypes = [];
 
         $questions = json_decode($json);
@@ -317,7 +324,8 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
     }
 
     /**
-     * Add to the form the distractors of a question, and the distractor choice of true/false questions.
+     * Add to the form the distractors of a question, and the distractor choice
+     * of true/false questions.
      * @param ilPropertyFormGUI $form
      * @param ilCheckboxInputGUI $enable the enable checkbox of the question
      * @param object $question the question, as read from the questions file
@@ -339,10 +347,14 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
         $distractors->setValue((string) $distractorsCount);
         $form->addItem($distractors);
 
-        for ($j = 0; $j < $distractorsCount; $j++) {
+        for ($distractor_index = 0; $distractor_index < $distractorsCount; $distractor_index++) {
+            $label = "";
+            if ($distractor_index == 0) {
+                $label = $this->plugin->txt($type == "tf" ? "questions_answer_false" : "questions_distractors");
+            }
             $distractor = new ilTextAreaInputGUI(
-                $j == 0 ? $this->plugin->txt($type == "tf" ? "questions_answer_false" : "questions_distractors") : "",
-                "question_{$i}_distractor_{$j}"
+                $label,
+                "question_{$i}_distractor_{$distractor_index}"
             );
             if ($type == "tf") {
                 $form->addItem($distractor);
@@ -354,7 +366,7 @@ class ilNolejQuestionsFormGUI extends ilNolejFormGUI
                 $distractor->setValueByArray($this->getPostData());
                 continue;
             }
-            $distractor->setValue($question->distractors[$j]);
+            $distractor->setValue($question->distractors[$distractor_index]);
         }
 
         // Choose distractor.

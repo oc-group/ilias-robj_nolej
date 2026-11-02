@@ -21,6 +21,7 @@ activities_cw_words#:#Defines how many words to use in the Crossword activity
 activities_dragtheword#:#Drag the word
 activities_dtw_words#:#Defines how many words to use in the Drag The Word activity
 activities_findtheword#:#Find the word
+activities_flashcards#:#Flashcards
 activities_flashcards_flashcards#:#Defines how many flashcards should appear in the conceptual assessment activity
 activities_ftw_words#:#Defines how many words to use in the Find The Word activity
 activities_generation_start#:#Selected activities are generating; you will receive a notification when they are ready. It may take up to 1 minute.
@@ -88,8 +89,10 @@ document_id#:#Document ID
 edit_h5p#:#Edit H5P
 err_access_denied#:#You cannot access this course.
 err_activities_get#:#Cannot retrieve some of the generated activities: %s. Please, try again to generate the activities.
+err_activity_not_found#:#Activity not found.
 err_analysis_not_ready#:#The analysis is not ready yet, please wait some time and check again.
 err_api_key_missing#:#API Key is missing! Save it and try again.
+err_api_unreachable#:#The Nolej service cannot be reached. Please try again later.
 err_concepts_file#:#Concepts file cannot be retrieved. Please, try again.
 err_concepts_put#:#NOLEJ returned an error, please check your data and try again.
 err_concepts_save#:#Concepts file cannot be saved on disk. Try again, and if it persists ask an Administrator for help.
@@ -103,8 +106,10 @@ err_h5p_not_active#:#The H5P plugin is not active. Please contact an administrat
 err_h5p_not_installed#:#The H5P plugin is not installed. Please contact an administrator.
 err_h5p_package#:#not a valid H5P package
 err_h5p_plugin#:#Sorry, your version of H5P plugin is not supported. Please update it or contact an administrator.
+err_invalid_token#:#The request could not be verified (invalid or missing security token). Please try again.
 err_json_decode#:#cannot decode the JSON
 err_media_format_unknown#:#Format not supported.
+err_media_url_empty#:#The source URL is empty.
 err_questions_file#:#Questions file cannot be retrieved. Please, try again.
 err_questions_put#:#NOLEJ returned an error, please check your data and try again.
 err_questions_save#:#Questions file cannot be saved on disk. Try again, and if it persists ask an Administrator for help.
@@ -115,7 +120,12 @@ err_settings_save#:#Activities settings file cannot be saved on disk. Try again,
 err_summary_file#:#Summary file cannot be retrieved. Please, try again.
 err_summary_put#:#NOLEJ returned an error, please check your data and try again.
 err_summary_save#:#Summary file cannot be saved on disk. Try again, and if it persists ask an Administrator for help.
+err_transcription_download#:#Cannot download the transcription
+err_transcription_get#:#Cannot retrieve the transcription
+err_transcription_missing#:#The title and the transcription cannot be empty.
 err_transcription_not_ready#:#The transcription is not ready yet, please wait some time and check again. It should take a tenth of the source duration; if after this time you haven't received any notification, please contact an Administrator. 
+err_url_userinfo#:#The URL must not contain a user name or a password. Remove them and try again.
+err_webhook_call#:#The last response of Nolej cannot be retrieved. Please try again later.
 fold_create_xnlj#:#Create NOLEJ object
 goto_activity_management#:#Go to Activity Management
 grp_create_xnlj#:#Create NOLEJ object

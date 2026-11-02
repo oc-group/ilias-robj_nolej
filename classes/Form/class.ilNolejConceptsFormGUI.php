@@ -15,7 +15,8 @@ declare(strict_types=1);
 /**
  * Concepts Form GUI class.
  *
- * @ilCtrl_isCalledBy ilNolejConceptsFormGUI: ilObjPluginDispatchGUI, ilObjNolejGUI, ilNolejManagerGUI
+ * @ilCtrl_isCalledBy ilNolejConceptsFormGUI: ilObjPluginDispatchGUI
+ * @ilCtrl_isCalledBy ilNolejConceptsFormGUI: ilObjNolejGUI, ilNolejManagerGUI
  */
 class ilNolejConceptsFormGUI extends ilNolejFormGUI
 {

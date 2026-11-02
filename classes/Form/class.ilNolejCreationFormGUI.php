@@ -16,7 +16,8 @@ declare(strict_types=1);
  * Creation Form GUI class.
  *
  * @ilCtrl_Calls ilNolejCreationFormGUI: ilNolejTranscriptionFormGUI
- * @ilCtrl_isCalledBy ilNolejCreationFormGUI: ilObjPluginDispatchGUI, ilObjNolejGUI, ilNolejManagerGUI
+ * @ilCtrl_isCalledBy ilNolejCreationFormGUI: ilObjPluginDispatchGUI
+ * @ilCtrl_isCalledBy ilNolejCreationFormGUI: ilObjNolejGUI, ilNolejManagerGUI
  */
 class ilNolejCreationFormGUI extends ilNolejFormGUI
 {
@@ -92,10 +93,13 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
 
         switch ($cmd) {
             case self::CMD_SHOW:
-            case self::CMD_SAVE:
             case self::CMD_MEDIA_SELECTOR:
             case self::CMD_MEDIA_SELECT:
                 $this->$cmd();
+                break;
+
+            case self::CMD_SAVE:
+                $this->saveWithToken();
                 break;
 
             case self::CMD_FILTER_SET:
@@ -129,6 +133,11 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
      */
     public function saveForm(): void
     {
+        // A repeated request must not create a second document.
+        if ($this->status != ilNolejManagerGUI::STATUS_CREATION) {
+            $this->ctrl->redirect($this, self::CMD_SHOW);
+        }
+
         $form = $this->form();
 
         if (!$form->checkInput()) {
@@ -152,6 +161,16 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
                 // No need to sign the url, just check the source type
                 // (content, or audio/video streaming).
                 $url = $form->getInput(self::PROP_URL);
+                if ($this->hasUserInfo((string) $url)) {
+                    $this->showFailure($this->plugin->txt("err_url_userinfo"));
+                    $form->setValuesByPost();
+                    $this->tpl->setContent($form->getHTML());
+                    $this->tpl->setRightContent(
+                        $this->renderer->render($this->manager->getWorkflow()->withActive(0))
+                    );
+                    return;
+                }
+
                 $formatInput = $form->getInput(self::PROP_WEB_SRC);
                 switch ($formatInput) {
                     case self::PROP_CONTENT:
@@ -168,7 +187,7 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
             case self::PROP_MOB:
                 // Use selected mob.
                 $mobId = (int) $form->getInput(self::PROP_MOB_ID);
-                if ($this->isValidMobId($mobId)) {
+                if ($this->canUseMob($mobId)) {
                     $format = $this->getMobFormat($mobId);
                     $url = $this->getSignedUrl($mobId, ilWACSignedPath::MAX_LIFETIME);
                 }
@@ -217,7 +236,7 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
         );
         if (!empty($errorMessage)) {
             // Creation failed.
-            $this->tpl->setOnScreenMessage("failure", $errorMessage);
+            $this->showFailure($errorMessage);
             $form->setValuesByPost();
             $this->tpl->setContent($form->getHTML());
             return;
@@ -363,7 +382,7 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
 
         $query = $DIC->http()->wrapper()->query();
         $mobId = $query->has("mob_id") ? $query->retrieve("mob_id", $DIC->refinery()->kindlyTo()->int()) : 0;
-        if ($this->isValidMobId($mobId)) {
+        if ($this->canUseMob($mobId)) {
             $path = ilObjMediaObject::_lookupItemPath($mobId);
             $title = ilObject::_lookupTitle($mobId);
 
@@ -487,13 +506,74 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
             return false;
         }
 
-        $path = ilObjMediaObject::_lookupItemPath($mobId, false, false);
-        if (!file_exists($path)) {
+        // The file path is built like the core does (the "./public/..."
+        // path of _lookupItemPath() is wrong when the cwd is "public").
+        $location = ilMediaItem::_lookupLocationForMobId($mobId, "Standard");
+        if ($location === "" || preg_match("/https?\:/i", $location)) {
+            return false;
+        }
+
+        $path = ilObjMediaObject::_getDirectory($mobId) . "/" . $location;
+        if (!is_file($path)) {
             return false;
         }
 
         $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
         return in_array($extension, ilNolejAPI::TYPE_SUPPORTED);
+    }
+
+    /**
+     * Check if the URL contains a user name or a password.
+     * @param string $url
+     * @return bool
+     */
+    protected function hasUserInfo(string $url): bool
+    {
+        $parts = parse_url($url);
+        if (is_array($parts) && (isset($parts["user"]) || isset($parts["pass"]))) {
+            return true;
+        }
+
+        // An empty user info ("https://@host/") is not reported by parse_url.
+        if (preg_match('~^[a-z][a-z0-9+.-]*://([^/?#]*)~i', $url, $matches) === 1) {
+            return str_contains($matches[1], "@");
+        }
+
+        return false;
+    }
+
+    /**
+     * Check that the media object is valid and belongs to a media pool
+     * the user can read.
+     * @param int $mob_id
+     * @return bool
+     */
+    protected function canUseMob(int $mob_id): bool
+    {
+        global $DIC;
+
+        if (!$this->isValidMobId($mob_id)) {
+            return false;
+        }
+
+        $db = $DIC->database();
+        $result = $db->queryF(
+            "SELECT DISTINCT t.mep_id FROM mep_tree t"
+            . " INNER JOIN mep_item i ON t.child = i.obj_id"
+            . " WHERE i.type = %s AND i.foreign_id = %s",
+            ["text", "integer"],
+            ["mob", $mob_id]
+        );
+
+        while ($row = $db->fetchAssoc($result)) {
+            foreach (ilObject::_getAllReferences((int) $row["mep_id"]) as $ref_id) {
+                if ($DIC->access()->checkAccess("read", "", (int) $ref_id)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -527,8 +607,12 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
         $this->lng->loadLanguageModule("content");
 
         $pool_view = "folder";
-        if (isset($_GET["pool_view"]) && in_array($_GET["pool_view"], ["folder", "all"])) {
-            $pool_view = $_GET["pool_view"];
+        $query = $DIC->http()->wrapper()->query();
+        $requested_view = $query->has("pool_view")
+            ? $query->retrieve("pool_view", $DIC->refinery()->kindlyTo()->string())
+            : "";
+        if (in_array($requested_view, ["folder", "all"], true)) {
+            $pool_view = $requested_view;
         }
 
         // Override back target.
@@ -655,15 +739,15 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
             $this->ctrl->redirect($this, self::CMD_SHOW);
         }
 
-        // Item id relative to the mediapool. The table allows multiple media to be selected,
-        // but only one can be set as the tile image.
+        // Item id relative to the mediapool. The table allows many media,
+        // but only one can be selected.
         $mediapoolItemId = $ids[0];
 
         // Media item id.
         $mobId = ilMediaPoolItem::lookupForeignId($mediapoolItemId);
 
-        // Check mob id validity.
-        if (!$this->isValidMobId($mobId)) {
+        // Check mob id validity and access.
+        if (!$this->canUseMob($mobId)) {
             $this->tpl->setOnScreenMessage("failure", $this->lng->txt("file_not_valid"), true);
             $this->ctrl->redirect($this, self::CMD_SHOW);
         }
@@ -794,7 +878,8 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
         }
 
         $api = new ilNolejAPI();
-        $webhookUrl = ILIAS_HTTP_PATH . "/goto.php?target=xnlj_webhook";
+        $webhookUrl = ILIAS_HTTP_PATH . "/goto.php?target=xnlj_webhook&"
+            . ilNolejWebhook::PARAM_TOKEN . "=" . (new ilNolejSettings())->getWebhookToken();
         $orgName = $DIC->settings()->get("short_inst_name") ?? "ILIAS";
 
         $result = $api->post(
@@ -817,9 +902,12 @@ class ilNolejCreationFormGUI extends ilNolejFormGUI
         if (!is_object($result) || !property_exists($result, "id") || !is_string($result->id)) {
             // An error occurred.
             $message = is_object($result) && property_exists($result, "Error")
-                ? $result->Error
-                : "<pre>" . print_r($result, true) . "</pre>";
-            return sprintf($this->plugin->txt("err_doc_response"), $message);
+                ? (string) $result->Error
+                : print_r($result, true);
+            // The message is shown escaped: the markup of the text is
+            // replaced by line breaks.
+            $template = str_replace("<br>", "\n", $this->plugin->txt("err_doc_response"));
+            return sprintf($template, $message);
         }
 
         $this->db->update(

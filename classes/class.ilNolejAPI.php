@@ -46,8 +46,17 @@ class ilNolejAPI
     /** @var int Max bytes for uploaded files (500 MB) */
     public const MAX_SIZE = 524288000;
 
+    /** @var int Seconds to connect to a server */
+    protected const CONNECT_TIMEOUT = 10;
+
+    /** @var int Seconds for the whole request */
+    protected const TIMEOUT = 60;
+
     /** @var ?string */
     private static ?string $key = null;
+
+    /** @var int HTTP status of the last request, 0 if there was none */
+    protected int $last_status = 0;
 
     /**
      * API class constructor.
@@ -64,7 +73,7 @@ class ilNolejAPI
     public static function getKey(): string
     {
         if (self::$key == null) {
-            self::$key = ilNolejPlugin::getConfig("api_key", "");
+            self::$key = (new ilNolejSettings())->getApiKey();
         }
         return self::$key;
     }
@@ -86,25 +95,7 @@ class ilNolejAPI
      */
     public function post($path, $data = [], $decode = true): object|string
     {
-        $data_json = json_encode($data);
-        $url = self::API_URL . $path;
-
-        $client = new GuzzleHttp\Client(["http_errors" => false]);
-        $response = $client->request("POST", $url, [
-            "headers" => [
-                "Authorization" => "X-API-KEY " . self::$key,
-                "User-Agent" => "ILIAS Plugin",
-                "Content-Type" => "application/json"
-            ],
-            "body" => $data_json
-        ]);
-
-        if (!$decode) {
-            return $response->getBody();
-        }
-
-        $object = json_decode((string) $response->getBody());
-        return $object !== null ? $object : $response->getBody();
+        return $this->request("POST", $path, (string) json_encode($data), $decode);
     }
 
     /**
@@ -118,24 +109,8 @@ class ilNolejAPI
     public function put($path, $data = [], $encode = false, $decode = true): object|string
     {
         $data_json = $encode ? json_encode($data) : $data;
-        $url = self::API_URL . $path;
 
-        $client = new GuzzleHttp\Client(["http_errors" => false]);
-        $response = $client->request("PUT", $url, [
-            "headers" => [
-                "Authorization" => "X-API-KEY " . self::$key,
-                "User-Agent" => "ILIAS Plugin",
-                "Content-Type" => "application/json"
-            ],
-            "body" => $data_json
-        ]);
-
-        if (!$decode) {
-            return $response->getBody();
-        }
-
-        $object = json_decode((string) $response->getBody());
-        return $object !== null ? $object : $response->getBody();
+        return $this->request("PUT", $path, (string) $data_json, $decode);
     }
 
     /**
@@ -155,24 +130,174 @@ class ilNolejAPI
         $encodeInput = false,
         $decodeOutput = true
     ): object|string {
-        $url = self::API_URL . $path;
         $encodedData = $encodeInput ? json_encode($data) : $data;
 
-        $client = new GuzzleHttp\Client(["http_errors" => false]);
-        $response = $client->request("GET", $url, [
-            "headers" => [
-                "Authorization" => "X-API-KEY " . self::$key,
-                "User-Agent" => "ILIAS Plugin",
-                "Content-Type" => "application/json"
-            ],
-            "body" => $encodedData
-        ]);
+        return $this->request("GET", $path, (string) $encodedData, $decodeOutput);
+    }
 
-        if (!$decodeOutput) {
-            return (string) $response->getBody();
+    /**
+     * Check if the last request got a 2xx response.
+     * @return bool
+     */
+    public function lastRequestSucceeded(): bool
+    {
+        return $this->last_status >= 200 && $this->last_status < 300;
+    }
+
+    /**
+     * Check the name of an activity given by Nolej: it is used as a
+     * file name.
+     * @param mixed $activity
+     * @return bool
+     */
+    public function isValidActivity($activity): bool
+    {
+        return is_object($activity)
+            && preg_match('/^[a-z0-9_]+$/', $this->getActivityField($activity, "activity_name")) === 1
+            && $this->getActivityField($activity, "url") !== "";
+    }
+
+    /**
+     * Get a string field of an activity given by Nolej.
+     * @param mixed $activity
+     * @param string $field
+     * @return string empty if missing or not a string
+     */
+    public function getActivityField($activity, string $field): string
+    {
+        if (!is_object($activity) || !is_string($activity->$field ?? null)) {
+            return "";
+        }
+        return $activity->$field;
+    }
+
+    /**
+     * Download a file from an https url (no API key is sent).
+     * @param string $url
+     * @return string the content, empty on failure
+     */
+    public function downloadUrl(string $url): string
+    {
+        if (!$this->isHttpsUrl($url)) {
+            return "";
         }
 
-        $object = json_decode((string) $response->getBody());
-        return $object !== null ? $object : $response->getBody();
+        try {
+            $response = $this->createClient()->request("GET", $url);
+        } catch (GuzzleHttp\Exception\GuzzleException $e) {
+            $this->logFailure($e);
+            return "";
+        }
+
+        return $response->getStatusCode() >= 200 && $response->getStatusCode() < 300
+            ? (string) $response->getBody()
+            : "";
+    }
+
+    /**
+     * Download a file from an https url to a path (no API key is sent).
+     * @param string $url
+     * @param string $path
+     * @return bool true if a not empty file has been saved
+     */
+    public function downloadUrlToFile(string $url, string $path): bool
+    {
+        if (!$this->isHttpsUrl($url)) {
+            return false;
+        }
+
+        try {
+            $response = $this->createClient()->request("GET", $url, ["sink" => $path]);
+        } catch (GuzzleHttp\Exception\GuzzleException $e) {
+            $this->logFailure($e);
+            return false;
+        }
+
+        $ok = $response->getStatusCode() >= 200
+            && $response->getStatusCode() < 300
+            && is_file($path)
+            && filesize($path) > 0;
+        if (!$ok && is_file($path)) {
+            unlink($path);
+        }
+        return $ok;
+    }
+
+    /**
+     * Send a request to the Nolej API.
+     * @param string $method
+     * @param string $path
+     * @param string $body
+     * @param bool $decode
+     * @return object|string The decoded response if $decode is true and it
+     * is a json object, the body otherwise. If Nolej cannot be reached:
+     * an object with the property "Error" (empty string if $decode is false).
+     */
+    protected function request(string $method, string $path, string $body, bool $decode): object|string
+    {
+        $this->last_status = 0;
+
+        try {
+            $response = $this->createClient()->request($method, self::API_URL . $path, [
+                "headers" => [
+                    "Authorization" => "X-API-KEY " . self::$key,
+                    "User-Agent" => "ILIAS Plugin",
+                    "Content-Type" => "application/json"
+                ],
+                "body" => $body
+            ]);
+        } catch (GuzzleHttp\Exception\GuzzleException $e) {
+            $this->logFailure($e);
+            if (!$decode) {
+                return "";
+            }
+            $error = new stdClass();
+            $error->Error = ilNolejPlugin::getInstance()->txt("err_api_unreachable");
+            return $error;
+        }
+
+        $this->last_status = $response->getStatusCode();
+        $content = (string) $response->getBody();
+        if (!$decode) {
+            return $content;
+        }
+
+        $object = json_decode($content);
+        return is_object($object) || is_string($object) ? $object : $content;
+    }
+
+    /**
+     * @return GuzzleHttp\Client
+     */
+    protected function createClient(): GuzzleHttp\Client
+    {
+        return new GuzzleHttp\Client([
+            "http_errors" => false,
+            "connect_timeout" => self::CONNECT_TIMEOUT,
+            "timeout" => self::TIMEOUT,
+        ]);
+    }
+
+    /**
+     * @param string $url
+     * @return bool
+     */
+    protected function isHttpsUrl(string $url): bool
+    {
+        return str_starts_with(strtolower($url), "https://");
+    }
+
+    /**
+     * Log a failed request: only the class of the exception, never the
+     * message (it may contain the url or the key).
+     * @param Throwable $e
+     * @return void
+     */
+    protected function logFailure(Throwable $e): void
+    {
+        ilNolejPlugin::getInstance()->log(
+            "Request to a remote server failed: " . get_class($e),
+            ilLogLevel::ERROR
+        );
     }
 }

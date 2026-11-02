@@ -17,6 +17,9 @@ declare(strict_types=1);
  */
 class ilNolejWebhook
 {
+    /** @var string query parameter with the token of the installation */
+    public const PARAM_TOKEN = "nolej_token";
+
     /** @var ilNolejPlugin */
     protected ilNolejPlugin $plugin;
 
@@ -33,17 +36,24 @@ class ilNolejWebhook
 
     /**
      * Parse the request from POST content if
-     * @param mixed $data is not null
+     * @param array<string, mixed>|null $data
      * @return void
      */
-    public function parse($data = null): void
+    public function parse(?array $data = null): void
     {
         global $DIC;
 
-        if ($data == null) {
-            header("Content-type: application/json; charset=UTF-8");
-            $data = json_decode((string) file_get_contents("php://input"), true);
+        if ($data === null) {
             $this->shouldExit = true;
+
+            // Reject the call before reading its body.
+            if (!$this->hasValidToken()) {
+                $this->plugin->log("Rejected a webhook call with a missing or invalid token.");
+                $this->exitWithMessage(403, "Forbidden.");
+                return;
+            }
+
+            $data = json_decode((string) file_get_contents("php://input"), true);
         }
 
         if (
@@ -90,30 +100,50 @@ class ilNolejWebhook
      * Die with status code and a message
      * @param int $code
      * @param string $message
-     * @return bool false if the request is not served by the webhook endpoint (no exit).
+     * @return bool false if the request is not served by the webhook endpoint
+     *   (no exit).
      */
     protected function exitWithMessage(
         $code = 400,
         $message = ""
     ): bool {
-        if ($this->shouldExit) {
-            // The status code must be set before any output: afterwards PHP raises a
-            // warning that ILIAS turns into an exception (fatal error page).
-            http_response_code($code);
-        }
+        global $DIC;
 
         if (!empty($message)) {
             $this->plugin->log("Replied to Nolej with message: " . $message);
-            if ($this->shouldExit) {
-                echo json_encode(["message" => $message]);
-            }
         }
 
         if (!$this->shouldExit) {
             return false;
         }
 
-        exit;
+        $body = empty($message) ? "" : (string) json_encode(["message" => $message]);
+        $response = $DIC->http()->response()
+            ->withStatus($code)
+            ->withHeader("Content-Type", "application/json; charset=UTF-8")
+            ->withBody(\ILIAS\Filesystem\Stream\Streams::ofString($body));
+        $DIC->http()->saveResponse($response);
+        $DIC->http()->sendResponse();
+        $DIC->http()->close();
+
+        return true;
+    }
+
+    /**
+     * Check the token of the installation sent by Nolej in the query.
+     * @return bool
+     */
+    protected function hasValidToken(): bool
+    {
+        global $DIC;
+
+        $query = $DIC->http()->wrapper()->query();
+        if (!$query->has(self::PARAM_TOKEN)) {
+            return false;
+        }
+
+        $sent = $query->retrieve(self::PARAM_TOKEN, $DIC->refinery()->kindlyTo()->string());
+        return (new ilNolejSettings())->isValidWebhookToken($sent);
     }
 
     /**
@@ -169,6 +199,7 @@ class ilNolejWebhook
                 . "   )"
                 . " ) a"
                 . " ON a.document_id = d.document_id"
+                . " INNER JOIN " . ilNolejPlugin::TABLE_DATA . " o ON o.document_id = d.document_id"
                 . " WHERE d.document_id = %s AND d.status = %s;",
             ["text", "text", "text", "integer"],
             [$documentId, $documentId, $documentId, ilNolejManagerGUI::STATUS_CREATION_PENDING]
@@ -309,6 +340,7 @@ class ilNolejWebhook
                 . "   )"
                 . " ) a"
                 . " ON a.document_id = d.document_id"
+                . " INNER JOIN " . ilNolejPlugin::TABLE_DATA . " o ON o.document_id = d.document_id"
                 . " WHERE d.document_id = %s AND d.status = %s;",
             ["text", "text", "text", "integer"],
             [$documentId, $documentId, $documentId, ilNolejManagerGUI::STATUS_ANALYSIS_PENDING]
@@ -412,6 +444,7 @@ class ilNolejWebhook
                 . "   )"
                 . " ) a"
                 . " ON a.document_id = d.document_id"
+                . " INNER JOIN " . ilNolejPlugin::TABLE_DATA . " o ON o.document_id = d.document_id"
                 . " WHERE d.document_id = %s AND d.status = %s;",
             ["text", "text", "text", "integer"],
             [$documentId, $documentId, $documentId, ilNolejManagerGUI::STATUS_ACTIVITIES_PENDING]
@@ -545,7 +578,7 @@ class ilNolejWebhook
             $lng->txt(ilNolejPlugin::PREFIX . "_" . $bodyVar),
             ...$vars
         );
-        $notification->setIconPath(ilNolejPlugin::PLUGIN_DIR . "/templates/images/icon_xnlj.svg");
+        $notification->setIconPath("./" . $this->plugin->getRelativeDirectory() . "/templates/images/icon_xnlj.svg");
         $notification->setShortDescriptionVar($descriptionVar);
         $notification->setLongDescriptionVar($descriptionVar);
         $notification->setAutoDisable(false);

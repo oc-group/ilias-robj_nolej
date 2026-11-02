@@ -24,16 +24,10 @@ class ilNolejPlugin extends ilRepositoryObjectPlugin
     public const PLUGIN_NAME = "Nolej";
 
     /** @var string */
-    public const PLUGIN_DIR = "./Customizing/global/plugins/Services/Repository/RepositoryObject/Nolej";
-
-    /** @var string */
     public const PERMALINK = "xnlj_modules";
 
     /** @var string */
     public const PREFIX = "rep_robj_xnlj";
-
-    /** @var string */
-    public const TABLE_CONFIG = "rep_robj_xnlj_config";
 
     /** @var string */
     public const TABLE_ACTIVITY = "rep_robj_xnlj_activity";
@@ -56,14 +50,11 @@ class ilNolejPlugin extends ilRepositoryObjectPlugin
     /** @var ilLogger */
     public ilLogger $logger;
 
-    /** @var array<string, string> */
-    protected static array $config = [];
-
     /**
      * Initialize plugin.
      * @return void
      */
-    public function init(): void
+    protected function init(): void
     {
         $this->logger = ilLoggerFactory::getLogger(self::PREFIX);
 
@@ -75,13 +66,13 @@ class ilNolejPlugin extends ilRepositoryObjectPlugin
     /**
      * Exchange renderer after plugin initialization.
      *
-     * Registers the GlobalScreen notification provider here: for repository object plugins
-     * init() runs before the "global_screen" service exists.
+     * Registers the GlobalScreen notification provider here, because for
+     * repository object plugins init() runs before "global_screen" exists.
      *
-     * Exchanges the default renderer instead of h5p plugin, if it is available, installed but not active.
-     * This needs to be done because this plugins should still be usable even if the
-     * main plugin is inactive. Since renderers are only exchanged if a plugin is
-     * active, we need to exchange the renderer here to cover this scenario.
+     * If the H5P plugin is installed but not active, its renderer is used:
+     * renderers are only exchanged by active plugins, and this plugin must
+     * stay usable when H5P is inactive. If H5P is missing, or fails, the
+     * default renderer is returned.
      * @see ilH5PPlugin::exchangeUIRendererAfterInitialization
      *
      * @param \ILIAS\DI\Container $dic
@@ -98,9 +89,18 @@ class ilNolejPlugin extends ilRepositoryObjectPlugin
             );
         }
 
-        if (ilNolejH5PIntegrationGUI::isH5PInstalled() && !ilNolejH5PIntegrationGUI::isH5PActive()) {
-            $h5p = ilNolejH5PIntegrationGUI::getH5PPlugin();
-            return $h5p->exchangeUIRendererAfterInitialization($dic);
+        // This runs on every request: a missing or broken H5P plugin must
+        // never stop ILIAS, so fall back to the default renderer.
+        try {
+            if (ilNolejH5PDependency::isInstalled() && !ilNolejH5PDependency::isActive()) {
+                $h5p = ilNolejH5PDependency::getPlugin();
+                return $h5p->exchangeUIRendererAfterInitialization($dic);
+            }
+        } catch (Throwable $e) {
+            $this->log(
+                "H5P renderer exchange failed: " . get_class($e) . ": " . $e->getMessage(),
+                ilLogLevel::ERROR
+            );
         }
 
         // Returns the default callable without executing it.
@@ -138,7 +138,8 @@ class ilNolejPlugin extends ilRepositoryObjectPlugin
     }
 
     /**
-     * Returns a list of all repository object types which can be a parent of this type.
+     * Returns a list of all repository object types which can be a parent of
+     * this type.
      * @return string[]
      */
     public function getParentTypes(): array
@@ -153,8 +154,10 @@ class ilNolejPlugin extends ilRepositoryObjectPlugin
      */
     protected function uninstallCustom(): void
     {
+        global $DIC;
+
         $tables = [
-            self::TABLE_CONFIG,
+            "rep_robj_xnlj_config",
             self::TABLE_ACTIVITY,
             self::TABLE_DATA,
             self::TABLE_DOC,
@@ -166,6 +169,18 @@ class ilNolejPlugin extends ilRepositoryObjectPlugin
             if ($this->db->tableExists($table)) {
                 $this->db->dropTable($table);
             }
+        }
+
+        // Documents of every object.
+        if (is_dir(ilObjNolej::dataDir())) {
+            ilFileUtils::delDir(ilObjNolej::dataDir());
+        }
+
+        // Settings and encryption key.
+        (new ilNolejSettings())->deleteAll();
+        $storage = $DIC->filesystem()->storage();
+        if ($storage->hasDir("xnlj")) {
+            $storage->deleteDir("xnlj");
         }
     }
 
@@ -202,50 +217,28 @@ class ilNolejPlugin extends ilRepositoryObjectPlugin
     }
 
     /**
-     * @param string $keyword
-     * @param string $defaultValue
-     * @return string
+     * Check the CSRF token (rtoken) of the current request. Every command
+     * that writes must call this before any effect.
+     * @return bool
      */
-    public static function getConfig($keyword, $defaultValue = ""): string
+    public static function hasValidRequestToken(): bool
     {
         global $DIC;
-        $db = $DIC->database();
 
-        if (isset(self::$config[$keyword])) {
-            return self::$config[$keyword];
+        try {
+            $query = $DIC->http()->wrapper()->query();
+            if (!$query->has(ilCtrlInterface::PARAM_CSRF_TOKEN)) {
+                return false;
+            }
+
+            $sent = $query->retrieve(
+                ilCtrlInterface::PARAM_CSRF_TOKEN,
+                $DIC->refinery()->kindlyTo()->string()
+            );
+            return (new ilCtrlTokenRepository())->getToken()->verifyWith($sent);
+        } catch (Throwable) {
+            return false;
         }
-
-        $res = $db->queryF(
-            "SELECT value FROM " . self::TABLE_CONFIG . " WHERE keyword = %s;",
-            ["text"],
-            [$keyword]
-        );
-
-        $record = $db->fetchAssoc($res);
-        if (!is_array($record)) {
-            return $defaultValue;
-        }
-
-        self::$config[$keyword] = (string) $record["value"];
-        return self::$config[$keyword];
-    }
-
-    /**
-     * @param string $keyword
-     * @param string $value
-     */
-    public static function saveConfig($keyword, $value): void
-    {
-        global $DIC;
-        $db = $DIC->database();
-
-        self::$config[$keyword] = $value;
-
-        $db->replace(
-            self::TABLE_CONFIG,
-            ["keyword" => ["text", $keyword]],
-            ["value" => ["text", $value]]
-        );
     }
 
     /**
@@ -262,6 +255,14 @@ class ilNolejPlugin extends ilRepositoryObjectPlugin
         $factory = $DIC->ui()->factory();
         $renderer = $DIC->ui()->renderer();
         $db = $DIC->database();
+
+        $plugin = self::getInstance();
+
+        if (!ilNolejH5PDependency::isInstalled()) {
+            return $renderer->render(
+                $factory->messageBox()->failure($plugin->txt("err_h5p_not_installed"))
+            );
+        }
 
         try {
             $result = $db->queryF(
@@ -280,10 +281,16 @@ class ilNolejPlugin extends ilRepositoryObjectPlugin
                 return $h5p->getHTML((int) $contentId, $type, $editable);
             }
 
-            throw new Exception("Activity not found.");
-        } catch (Exception $e) {
-            // Fallback.
-            return $renderer->render($factory->messageBox()->failure($e->getMessage()));
+            return $renderer->render(
+                $factory->messageBox()->failure($plugin->txt("err_activity_not_found"))
+            );
+        } catch (Throwable $e) {
+            // Fallback: the detail goes to the log, not to the page.
+            $plugin->log(
+                "Cannot render H5P content {$contentId}: " . get_class($e) . ": " . $e->getMessage(),
+                ilLogLevel::ERROR
+            );
+            return $renderer->render($factory->messageBox()->failure($plugin->txt("err_h5p_content")));
         }
     }
 
