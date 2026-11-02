@@ -548,6 +548,10 @@ class ilNolejActivity
             [$this->getDocumentId()]
         );
         $row = $db->fetchAssoc($res);
+        if (!is_array($row) || !isset($row["id"])) {
+            // The document has no ILIAS object anymore (e.g. the object was deleted).
+            return null;
+        }
         $this->objId = (int) $row["id"];
         return $this->objId;
     }
