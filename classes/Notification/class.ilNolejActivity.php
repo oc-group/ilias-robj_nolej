@@ -550,6 +550,12 @@ class ilNolejActivity
         $row = $db->fetchAssoc($res);
         if (!is_array($row) || !isset($row["id"])) {
             // The document has no ILIAS object anymore (e.g. the object was deleted).
+            $this->plugin->log(
+                "Notification: document " . (string) $this->getDocumentId()
+                . " (action " . (string) $this->getAction() . ", user " . (string) $this->getUserId()
+                . ") has no ILIAS object anymore.",
+                ilLogLevel::WARNING
+            );
             return null;
         }
         $this->objId = (int) $row["id"];

@@ -360,3 +360,24 @@ if ($ilDB->tableExists("rep_robj_xnlj_config")) {
 }
 
 ?>
+
+<#7>
+<?php
+
+// Delete activities whose object is gone or in the trash (they broke every page
+// before 10.2.5). NOT EXISTS, not NOT IN: data.document_id can be NULL.
+if (
+    $ilDB->tableExists("rep_robj_xnlj_activity") &&
+    $ilDB->tableExists("rep_robj_xnlj_data")
+) {
+    $ilDB->manipulate(
+        "DELETE FROM rep_robj_xnlj_activity WHERE NOT EXISTS ("
+        . "SELECT 1 FROM rep_robj_xnlj_data d"
+        . " INNER JOIN object_reference r ON r.obj_id = d.id"
+        . " WHERE d.document_id = rep_robj_xnlj_activity.document_id"
+        . " AND r.deleted IS NULL"
+        . ")"
+    );
+}
+
+?>
