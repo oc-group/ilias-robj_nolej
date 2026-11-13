@@ -11,7 +11,7 @@
  */
 
 $id = "xnlj";
-$version = "1.3.1";
+$version = "7.1.0";
 
 $ilias_min_version = "6.0";
 $ilias_max_version = "7.999";
